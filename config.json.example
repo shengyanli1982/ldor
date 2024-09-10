@@ -1,0 +1,21 @@
+{
+    "bind": "127.0.0.1:8181",
+    "proxy_url": "",
+    "timeout": 600,
+    "requests_per_sec": 255,
+    "codex_api_base": "https://api-proxy.oaipro.com/v1",
+    "codex_api_key": "sk-xxx",
+    "codex_api_organization": "",
+    "codex_api_project": "",
+    "codex_max_tokens": 500,
+    "code_instruct_model": "gpt-3.5-turbo-instruct",
+    "chat_api_base": "https://api-proxy.oaipro.com/v1",
+    "chat_api_key": "sk-xxx",
+    "chat_api_organization": "",
+    "chat_api_project": "",
+    "chat_max_tokens": 4096,
+    "chat_model_default": "gpt-4o",
+    "chat_model_map": {},
+    "chat_locale": "zh_CN",
+    "auth_token": ""
+}
