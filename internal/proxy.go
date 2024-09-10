@@ -15,11 +15,18 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
+	"go.uber.org/zap"
 	"golang.org/x/net/http2"
 )
 
-const StableCodeModelPrefix = "stable-code"
-const DeepSeekCoderModel = "deepseek-coder"
+const (
+	StableCodeModelPrefix = "stable-code"
+	DeepSeekCoderModel    = "deepseek-coder"
+)
+
+var (
+	ErrorConfigureTransport = errors.New("config transport failed")
+)
 
 type Pong struct {
 	Now    int    `json:"now"`
@@ -28,17 +35,19 @@ type Pong struct {
 }
 
 type ProxyService struct {
+	log    *zap.SugaredLogger
 	cfg    *ServiceConfig
 	client *http.Client
 }
 
-func NewProxyService(cfg *ServiceConfig) (*ProxyService, error) {
+func NewProxyService(cfg *ServiceConfig, log *zap.SugaredLogger) (*ProxyService, error) {
 	client, err := getClient(cfg)
 	if nil != err {
 		return nil, err
 	}
 
 	return &ProxyService{
+		log:    log,
 		cfg:    cfg,
 		client: client,
 	}, nil
@@ -78,6 +87,13 @@ func (s *ProxyService) models(c *gin.Context) {
 	c.JSON(http.StatusOK, defaultModels)
 }
 
+func abortCodex(c *gin.Context, status int) {
+	c.Header("Content-Type", "text/event-stream")
+
+	c.String(status, "data: [DONE]\n")
+	c.Abort()
+}
+
 func (s *ProxyService) codeCompletions(c *gin.Context) {
 	ctx := c.Request.Context()
 	if ctx.Err() != nil {
@@ -86,58 +102,59 @@ func (s *ProxyService) codeCompletions(c *gin.Context) {
 	}
 
 	body, err := io.ReadAll(c.Request.Body)
-	if nil != err {
+	if err != nil {
+		s.log.Errorf("Failed to read request body: %v", err)
 		abortCodex(c, http.StatusBadRequest)
 		return
 	}
 
-	body = ConstructRequestBody(body, s.cfg)
+	body = ConstructRequestBody(body, s.cfg, s.log)
 
-	proxyUrl := s.cfg.CodexApiBase + "/completions"
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, proxyUrl, io.NopCloser(bytes.NewBuffer(body)))
-	if nil != err {
+	proxyURL := s.cfg.CodexApiBase + "/completions"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, proxyURL, bytes.NewReader(body))
+	if err != nil {
+		s.log.Errorf("Failed to create request: %v", err)
 		abortCodex(c, http.StatusInternalServerError)
 		return
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+s.cfg.CodexApiKey)
-	if "" != s.cfg.CodexApiOrganization {
+	if s.cfg.CodexApiOrganization != "" {
 		req.Header.Set("OpenAI-Organization", s.cfg.CodexApiOrganization)
 	}
-	if "" != s.cfg.CodexApiProject {
+	if s.cfg.CodexApiProject != "" {
 		req.Header.Set("OpenAI-Project", s.cfg.CodexApiProject)
 	}
 
 	resp, err := s.client.Do(req)
-	if nil != err {
+	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			abortCodex(c, http.StatusRequestTimeout)
-			return
+		} else {
+			s.log.Errorf("Request completions failed: %v", err)
+			abortCodex(c, http.StatusInternalServerError)
 		}
-
-		log.Println("request completions failed:", err.Error())
-		abortCodex(c, http.StatusInternalServerError)
 		return
 	}
-	defer closeIO(resp.Body)
+	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		log.Println("request completions failed:", string(body))
-
+		s.log.Errorf("Request completions failed with status code %d: %s", resp.StatusCode, string(body))
 		abortCodex(c, resp.StatusCode)
 		return
 	}
 
 	c.Status(resp.StatusCode)
-
-	contentType := resp.Header.Get("Content-Type")
-	if "" != contentType {
+	if contentType := resp.Header.Get("Content-Type"); contentType != "" {
 		c.Header("Content-Type", contentType)
 	}
 
-	_, _ = io.Copy(c.Writer, resp.Body)
+	_, err = io.Copy(c.Writer, resp.Body)
+	if err != nil {
+		s.log.Errorf("Failed to copy response body: %v", err)
+	}
 }
 
 func (s *ProxyService) chatCompletions(c *gin.Context) {
@@ -156,37 +173,56 @@ func AuthMiddleware(authToken string) gin.HandlerFunc {
 	}
 }
 
-func ConstructRequestBody(body []byte, cfg *ServiceConfig) []byte {
-	body, _ = sjson.DeleteBytes(body, "extra")
-	body, _ = sjson.DeleteBytes(body, "nwo")
-	body, _ = sjson.SetBytes(body, "model", cfg.CodeInstructModel)
-
-	if int(gjson.GetBytes(body, "max_tokens").Int()) > cfg.CodexMaxTokens {
-		body, _ = sjson.SetBytes(body, "max_tokens", cfg.CodexMaxTokens)
+func ConstructRequestBody(body []byte, cfg *ServiceConfig, log *zap.SugaredLogger) []byte {
+	var err error
+	body, err = sjson.DeleteBytes(body, "extra")
+	if err != nil {
+		// 处理错误，例如记录日志
+		log.Errorf("Error deleting fields: %v", err)
 	}
 
-	if strings.Contains(cfg.CodeInstructModel, StableCodeModelPrefix) {
-		return constructWithStableCodeModel(body)
-	} else if strings.HasPrefix(cfg.CodeInstructModel, DeepSeekCoderModel) {
-		if gjson.GetBytes(body, "n").Int() > 1 {
-			body, _ = sjson.SetBytes(body, "n", 1)
+	body, err = sjson.DeleteBytes(body, "nwo")
+	if err != nil {
+		// 处理错误，例如记录日志
+		log.Errorf("Error deleting fields: %v", err)
+	}
+
+	body, err = sjson.SetBytes(body, "model", cfg.CodeInstructModel)
+	if err != nil {
+		log.Errorf("Error setting model: %v", err)
+	}
+
+	maxTokens := gjson.GetBytes(body, "max_tokens").Int()
+	if int(maxTokens) > cfg.CodexMaxTokens {
+		body, err = sjson.SetBytes(body, "max_tokens", cfg.CodexMaxTokens)
+		if err != nil {
+			log.Errorf("Error setting max_tokens: %v", err)
 		}
 	}
 
-	// if strings.HasSuffix(cfg.ChatApiBase, "chat") {
-	// 	// @Todo  constructWithChatModel
-	// 	// 如果code base以chat结尾则构建chatModel，暂时没有好的prompt
-	// }
+	switch {
+	case strings.Contains(cfg.CodeInstructModel, StableCodeModelPrefix):
+		return constructWithStableCodeModel(body)
+	case strings.HasPrefix(cfg.CodeInstructModel, DeepSeekCoderModel):
+		if gjson.GetBytes(body, "n").Int() > 1 {
+			body, err = sjson.SetBytes(body, "n", 1)
+			if err != nil {
+				log.Errorf("Error setting n: %v", err)
+			}
+		}
+		// TODO: 需要实现
+		// case strings.HasSuffix(cfg.ChatApiBase, "chat"):
+		// 	return constructWithChatModel(body, nil) // 需要实现
+	}
 
 	return body
 }
 
 func constructWithStableCodeModel(body []byte) []byte {
-	suffix := gjson.GetBytes(body, "suffix")
-	prompt := gjson.GetBytes(body, "prompt")
+	suffix := gjson.GetBytes(body, "suffix").String()
+	prompt := gjson.GetBytes(body, "prompt").String()
 	content := fmt.Sprintf("<fim_prefix>%s<fim_suffix>%s<fim_middle>", prompt, suffix)
 
-	// 创建新的 JSON 对象并添加到 body 中
 	messages := []map[string]string{
 		{
 			"role":    "user",
@@ -197,49 +233,39 @@ func constructWithStableCodeModel(body []byte) []byte {
 }
 
 func constructWithChatModel(body []byte, messages interface{}) []byte {
-
-	body, _ = sjson.SetBytes(body, "messages", messages)
-
-	// fmt.Printf("Request Body: %s\n", body)
-	// 2. 将转义的字符替换回原来的字符
-	jsonStr := string(body)
-	jsonStr = strings.ReplaceAll(jsonStr, "\\u003c", "<")
-	jsonStr = strings.ReplaceAll(jsonStr, "\\u003e", ">")
-	return []byte(jsonStr)
-}
-
-func abortCodex(c *gin.Context, status int) {
-	c.Header("Content-Type", "text/event-stream")
-
-	c.String(status, "data: [DONE]\n")
-	c.Abort()
-}
-
-func closeIO(c io.Closer) {
-	err := c.Close()
-	if nil != err {
-		log.Println(err)
+	var err error
+	body, err = sjson.SetBytes(body, "messages", messages)
+	if err != nil {
+		log.Printf("Error setting messages: %v", err)
 	}
+
+	jsonStr := string(body)
+	jsonStr = strings.NewReplacer(
+		"\\u003c", "<",
+		"\\u003e", ">",
+	).Replace(jsonStr)
+	return []byte(jsonStr)
 }
 
 func getClient(cfg *ServiceConfig) (*http.Client, error) {
 	transport := &http.Transport{
-		ForceAttemptHTTP2: true,
-		DisableKeepAlives: false,
+		ForceAttemptHTTP2:   true,
+		DisableKeepAlives:   false,
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 100,
+		IdleConnTimeout:     90 * time.Second,
 	}
 
-	err := http2.ConfigureTransport(transport)
-	if nil != err {
-		return nil, err
+	if err := http2.ConfigureTransport(transport); err != nil {
+		return nil, ErrorConfigureTransport
 	}
 
-	if "" != cfg.ProxyUrl {
-		proxyUrl, err := url.Parse(cfg.ProxyUrl)
-		if nil != err {
+	if cfg.ProxyUrl != "" {
+		proxyURL, err := url.Parse(cfg.ProxyUrl)
+		if err != nil {
 			return nil, err
 		}
-
-		transport.Proxy = http.ProxyURL(proxyUrl)
+		transport.Proxy = http.ProxyURL(proxyURL)
 	}
 
 	client := &http.Client{

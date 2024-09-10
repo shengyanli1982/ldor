@@ -57,12 +57,6 @@ func main() {
 		os.Exit(-1)
 	}
 
-	proxyService, err := il.NewProxyService(cfg)
-	if err != nil {
-		fmt.Printf("Failed to create proxy service: %v\n", err)
-		os.Exit(-1)
-	}
-
 	orbitConfig := orbit.NewConfig()
 	orbitOptions := orbit.NewOptions().EnableMetric()
 
@@ -73,6 +67,15 @@ func main() {
 	} else {
 		fmt.Printf("Loading config: [%s], Value:\n==========\n%s==========\n", configPath, cfg.String())
 		logger = log.NewLogger(zapcore.AddSync(os.Stdout)).GetZapSugaredLogger().Named("default")
+	}
+
+	proxyService, err := il.NewProxyService(cfg, logger)
+	if err != nil {
+		logger.Errorf("Failed to create proxy service: %v", err)
+		if releaseMode || gin.Mode() == gin.ReleaseMode {
+			asyncWriter.Stop()
+		}
+		os.Exit(-1)
 	}
 
 	timeout := uint32(time.Duration(cfg.Timeout) * time.Second)
