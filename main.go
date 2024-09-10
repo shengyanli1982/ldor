@@ -30,6 +30,7 @@ func main() {
 
 	cmd := cobra.Command{}
 	cmd.Flags().StringVarP(&configPath, "config", "c", "./config.json", "Configuration file path")
+	cmd.Flags().BoolVarP(&releaseMode, "release", "r", false, "Set release mode")
 
 	command.PrettyCobraHelpAndUsage(&cmd)
 	err := cmd.Execute()

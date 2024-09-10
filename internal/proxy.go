@@ -80,8 +80,6 @@ func (s *ProxyService) models(c *gin.Context) {
 
 func (s *ProxyService) codeCompletions(c *gin.Context) {
 	ctx := c.Request.Context()
-
-	time.Sleep(200 * time.Millisecond)
 	if ctx.Err() != nil {
 		abortCodex(c, http.StatusRequestTimeout)
 		return
@@ -175,10 +173,10 @@ func ConstructRequestBody(body []byte, cfg *ServiceConfig) []byte {
 		}
 	}
 
-	if strings.HasSuffix(cfg.ChatApiBase, "chat") {
-		// @Todo  constructWithChatModel
-		// 如果code base以chat结尾则构建chatModel，暂时没有好的prompt
-	}
+	// if strings.HasSuffix(cfg.ChatApiBase, "chat") {
+	// 	// @Todo  constructWithChatModel
+	// 	// 如果code base以chat结尾则构建chatModel，暂时没有好的prompt
+	// }
 
 	return body
 }
