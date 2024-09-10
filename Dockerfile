@@ -10,9 +10,10 @@ FROM alpine:3.18
 
 WORKDIR /app
 COPY --from=builder /build/ldor /app/ldor
+COPY config.json /app
 
 RUN ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && echo "Asia/Shanghai" > /etc/timezone
 
 RUN chmod 755 /app/ldor
 
-ENTRYPOINT ["/app/ldor", "-r"]
+ENTRYPOINT ["/app/ldor", "-r", "-p"]
