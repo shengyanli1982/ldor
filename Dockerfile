@@ -3,16 +3,16 @@ FROM golang:1.21 as builder
 ENV GO111MODULE=on GOPROXY=https://goproxy.cn,direct
 RUN go mod download
     
-RUN  GO111MODULE=on CGO_ENABLED=0 GOOS=linux go build -tags=jsoniter -ldflags="-w -s" -o or
+RUN  GO111MODULE=on CGO_ENABLED=0 GOOS=linux go build -tags=jsoniter -ldflags="-w -s" -o ldor
 
 
 FROM alpine:3.18
 
 WORKDIR /app
-COPY --from=builder /build/or /app/or
+COPY --from=builder /build/ldor /app/ldor
 
 RUN ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && echo "Asia/Shanghai" > /etc/timezone
 
-RUN chmod 755 /app/or
+RUN chmod 755 /app/ldor
 
-ENTRYPOINT ["/app/or", "-r"]
+ENTRYPOINT ["/app/ldor", "-r"]

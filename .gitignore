@@ -27,4 +27,5 @@ go.work.sum
 .vscode
 .idea
 test/
+bin/
 .DS_Store
