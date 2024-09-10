@@ -7,6 +7,7 @@ require (
 	github.com/shengyanli1982/gs v0.1.5
 	github.com/shengyanli1982/law v0.1.16
 	github.com/shengyanli1982/orbit v0.1.8
+	github.com/shengyanli1982/orbit-contrib/pkg/ratelimiter v0.0.0-20240316141708-c96df0258ecd
 	github.com/shengyanli1982/toolkit/pkg/command v0.0.0-20240829143620-c99268455b35
 	github.com/spf13/cobra v1.8.1
 	github.com/tidwall/gjson v1.17.3
@@ -51,6 +52,7 @@ require (
 	github.com/prometheus/client_model v0.6.1 // indirect
 	github.com/prometheus/common v0.48.0 // indirect
 	github.com/prometheus/procfs v0.12.0 // indirect
+	github.com/shengyanli1982/orbit-contrib v0.0.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/swaggo/files v1.0.1 // indirect
 	github.com/swaggo/gin-swagger v1.6.0 // indirect
@@ -64,6 +66,7 @@ require (
 	golang.org/x/crypto v0.24.0 // indirect
 	golang.org/x/sys v0.21.0 // indirect
 	golang.org/x/text v0.16.0 // indirect
+	golang.org/x/time v0.5.0 // indirect
 	golang.org/x/tools v0.22.0 // indirect
 	google.golang.org/protobuf v1.34.2 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

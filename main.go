@@ -10,27 +10,32 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/shengyanli1982/gs"
 	"github.com/shengyanli1982/law"
+	il "github.com/shengyanli1982/ldor/internal"
 	"github.com/shengyanli1982/orbit"
+	rl "github.com/shengyanli1982/orbit-contrib/pkg/ratelimiter"
 	"github.com/shengyanli1982/orbit/utils/log"
 	"github.com/shengyanli1982/toolkit/pkg/command"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-
-	il "github.com/shengyanli1982/ldor/internal"
 )
 
 func main() {
 	var (
-		configPath  string
-		asyncWriter *law.WriteAsyncer
-		logger      *zap.SugaredLogger
-		releaseMode bool
+		configPath                string
+		asyncWriter               *law.WriteAsyncer
+		logger                    *zap.SugaredLogger
+		releaseMode, plainLogMode bool
 	)
 
-	cmd := cobra.Command{}
+	cmd := cobra.Command{
+		Use:   "ldor",
+		Short: "ldor is copilot(linux do) override service",
+		Long:  "ldor is a proxy service that forwards requests to a target server and returns the response. ",
+	}
 	cmd.Flags().StringVarP(&configPath, "config", "c", "./config.json", "Configuration file path")
 	cmd.Flags().BoolVarP(&releaseMode, "release", "r", false, "Set release mode")
+	cmd.Flags().BoolVarP(&plainLogMode, "plain", "p", false, "Set plain text log mode, default is json log mode (only valid in release mode)")
 
 	command.PrettyCobraHelpAndUsage(&cmd)
 	err := cmd.Execute()
@@ -57,19 +62,27 @@ func main() {
 		os.Exit(-1)
 	}
 
+	rlConf := rl.NewConfig().WithRate(float64(cfg.TotalRequestsPerSec)).WithBurst(1)
+	limiter := rl.NewRateLimiter(rlConf)
+
 	orbitConfig := orbit.NewConfig()
 	orbitOptions := orbit.NewOptions().EnableMetric()
 
 	if releaseMode || gin.Mode() == gin.ReleaseMode {
 		orbitConfig.WithRelease()
 		asyncWriter = law.NewWriteAsyncer(os.Stdout, law.DefaultConfig())
-		logger = log.NewLogger(zapcore.AddSync(asyncWriter)).GetZapSugaredLogger().Named("default")
+		if plainLogMode {
+			logger = il.NewLogger(zapcore.AddSync(asyncWriter)).GetZapSugaredLogger().Named("default")
+		} else {
+			logger = log.NewLogger(zapcore.AddSync(asyncWriter)).GetZapSugaredLogger().Named("default")
+		}
+
 	} else {
 		fmt.Printf("Loading config: [%s], Value:\n==========\n%s==========\n", configPath, cfg.String())
-		logger = log.NewLogger(zapcore.AddSync(os.Stdout)).GetZapSugaredLogger().Named("default")
+		logger = il.NewLogger(zapcore.AddSync(os.Stdout)).GetZapSugaredLogger().Named("default")
 	}
 
-	proxyService, err := il.NewProxyService(cfg, logger)
+	proxyService, err := il.NewProxyService(cfg, logger, limiter)
 	if err != nil {
 		logger.Errorf("Failed to create proxy service: %v", err)
 		if releaseMode || gin.Mode() == gin.ReleaseMode {
@@ -87,7 +100,7 @@ func main() {
 	orbitEngine.Run()
 
 	engineStopSignal := gs.NewTerminateSignal()
-	engineStopSignal.RegisterCancelHandles(orbitEngine.Stop)
+	engineStopSignal.RegisterCancelHandles(orbitEngine.Stop, limiter.Stop)
 
 	writerStopSignal := gs.NewTerminateSignal()
 	if releaseMode || gin.Mode() == gin.ReleaseMode {

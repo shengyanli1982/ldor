@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	rl "github.com/shengyanli1982/orbit-contrib/pkg/ratelimiter"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 	"go.uber.org/zap"
@@ -24,9 +25,7 @@ const (
 	DeepSeekCoderModel    = "deepseek-coder"
 )
 
-var (
-	ErrorConfigureTransport = errors.New("config transport failed")
-)
+var ErrorConfigureTransport = errors.New("config transport failed")
 
 type Pong struct {
 	Now    int    `json:"now"`
@@ -35,21 +34,23 @@ type Pong struct {
 }
 
 type ProxyService struct {
-	log    *zap.SugaredLogger
-	cfg    *ServiceConfig
-	client *http.Client
+	limiter *rl.RateLimiter
+	log     *zap.SugaredLogger
+	cfg     *ServiceConfig
+	client  *http.Client
 }
 
-func NewProxyService(cfg *ServiceConfig, log *zap.SugaredLogger) (*ProxyService, error) {
+func NewProxyService(cfg *ServiceConfig, log *zap.SugaredLogger, rl *rl.RateLimiter) (*ProxyService, error) {
 	client, err := getClient(cfg)
 	if nil != err {
 		return nil, err
 	}
 
 	return &ProxyService{
-		log:    log,
-		cfg:    cfg,
-		client: client,
+		log:     log,
+		limiter: rl,
+		cfg:     cfg,
+		client:  client,
 	}, nil
 }
 
@@ -62,16 +63,16 @@ func (ps *ProxyService) RegisterGroup(g *gin.RouterGroup) {
 		// 鉴权
 		v1 := g.Group("/:token/v1/", AuthMiddleware(authToken))
 		{
-			v1.POST("/chat/completions", ps.chatCompletions)
-			v1.POST("/engines/copilot-codex/completions", ps.codeCompletions)
-			v1.POST("/v1/chat/completions", ps.chatCompletions)
-			v1.POST("/v1/engines/copilot-codex/completions", ps.codeCompletions)
+			v1.POST("/chat/completions", ps.limiter.HandlerFunc(), ps.chatCompletions)
+			v1.POST("/engines/copilot-codex/completions", ps.limiter.HandlerFunc(), ps.codeCompletions)
+			v1.POST("/v1/chat/completions", ps.limiter.HandlerFunc(), ps.chatCompletions)
+			v1.POST("/v1/engines/copilot-codex/completions", ps.limiter.HandlerFunc(), ps.codeCompletions)
 		}
 	} else {
-		g.POST("/v1/chat/completions", ps.chatCompletions)
-		g.POST("/v1/engines/copilot-codex/completions", ps.codeCompletions)
-		g.POST("/v1/v1/chat/completions", ps.chatCompletions)
-		g.POST("/v1/v1/engines/copilot-codex/completions", ps.codeCompletions)
+		g.POST("/v1/chat/completions", ps.limiter.HandlerFunc(), ps.chatCompletions)
+		g.POST("/v1/engines/copilot-codex/completions", ps.limiter.HandlerFunc(), ps.codeCompletions)
+		g.POST("/v1/v1/chat/completions", ps.limiter.HandlerFunc(), ps.chatCompletions)
+		g.POST("/v1/v1/engines/copilot-codex/completions", ps.limiter.HandlerFunc(), ps.codeCompletions)
 	}
 }
 

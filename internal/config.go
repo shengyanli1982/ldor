@@ -4,15 +4,17 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"strconv"
 )
 
 const (
-	DefaultInstructModel = "gpt-3.5-turbo-instruct"
-	DefaultApiBase       = "https://api.openai.com/v1"
-	DefaultMaxTokens     = 2048
-	DefaultLanguage      = "zh_CN"
+	DefaultInstructModel  = "gpt-3.5-turbo-instruct"
+	DefaultApiBase        = "https://api.openai.com/v1"
+	DefaultMaxTokens      = 2048
+	DefaultLanguage       = "zh_CN"
+	DefaultRequestsPerSec = math.MaxUint8
 )
 
 type ServiceConfig struct {
@@ -34,6 +36,7 @@ type ServiceConfig struct {
 	ChatModelMap         map[string]string `json:"chat_model_map,omitempty"`
 	ChatLocale           string            `json:"chat_locale,omitempty"`
 	AuthToken            string            `json:"auth_token,omitempty"`
+	TotalRequestsPerSec  int               `json:"requests_per_sec,omitempty"`
 }
 
 func NewServiceConfig() *ServiceConfig {
@@ -82,6 +85,9 @@ func (sc *ServiceConfig) LoadConfig(filePath string) error {
 	if sc.ChatLocale == "" {
 		sc.ChatLocale = DefaultLanguage
 	}
+	if sc.TotalRequestsPerSec <= 0 {
+		sc.TotalRequestsPerSec = DefaultRequestsPerSec
+	}
 
 	return nil
 }
@@ -91,6 +97,7 @@ func (c *ServiceConfig) String() string {
 	b.WriteString("> Bind: " + c.Bind + "\n")
 	b.WriteString("> ProxyUrl: " + c.ProxyUrl + "\n")
 	b.WriteString("> Timeout: " + strconv.Itoa(c.Timeout) + "\n")
+	b.WriteString("> TotalRequestsPerSec: " + strconv.Itoa(c.TotalRequestsPerSec) + "\n")
 	b.WriteString("> CodexApiBase: " + c.CodexApiBase + "\n")
 	b.WriteString("> CodexApiOrganization: " + c.CodexApiOrganization + "\n")
 	b.WriteString("> CodexApiProject: " + c.CodexApiProject + "\n")
