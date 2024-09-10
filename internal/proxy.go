@@ -87,13 +87,6 @@ func (s *ProxyService) models(c *gin.Context) {
 	c.JSON(http.StatusOK, defaultModels)
 }
 
-func abortCodex(c *gin.Context, status int) {
-	c.Header("Content-Type", "text/event-stream")
-
-	c.String(status, "data: [DONE]\n")
-	c.Abort()
-}
-
 func (s *ProxyService) codeCompletions(c *gin.Context) {
 	ctx := c.Request.Context()
 	if ctx.Err() != nil {
@@ -158,7 +151,99 @@ func (s *ProxyService) codeCompletions(c *gin.Context) {
 }
 
 func (s *ProxyService) chatCompletions(c *gin.Context) {
+	ctx := c.Request.Context()
+	if ctx.Err() != nil {
+		abortChat(c, http.StatusRequestTimeout)
+		return
+	}
 
+	body, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		s.log.Errorf("Failed to read request body: %v", err)
+		abortChat(c, http.StatusBadRequest)
+		return
+	}
+
+	body = s.constructChatRequestBody(body)
+
+	proxyURL := s.cfg.ChatApiBase + "/chat/completions"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, proxyURL, bytes.NewReader(body))
+	if err != nil {
+		s.log.Errorf("Failed to create request: %v", err)
+		abortChat(c, http.StatusInternalServerError)
+		return
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+s.cfg.ChatApiKey)
+	if s.cfg.ChatApiOrganization != "" {
+		req.Header.Set("OpenAI-Organization", s.cfg.ChatApiOrganization)
+	}
+	if s.cfg.ChatApiProject != "" {
+		req.Header.Set("OpenAI-Project", s.cfg.ChatApiProject)
+	}
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			abortChat(c, http.StatusRequestTimeout)
+		} else {
+			s.log.Errorf("Request chat completions failed: %v", err)
+			abortChat(c, http.StatusInternalServerError)
+		}
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		s.log.Errorf("Request chat completions failed with status code %d: %s", resp.StatusCode, string(body))
+		abortChat(c, resp.StatusCode)
+		return
+	}
+
+	c.Status(resp.StatusCode)
+	if contentType := resp.Header.Get("Content-Type"); contentType != "" {
+		c.Header("Content-Type", contentType)
+	}
+
+	_, err = io.Copy(c.Writer, resp.Body)
+	if err != nil {
+		s.log.Errorf("Failed to copy response body: %v", err)
+	}
+}
+
+func (s *ProxyService) constructChatRequestBody(body []byte) []byte {
+	model := gjson.GetBytes(body, "model").String()
+	if mapped, ok := s.cfg.ChatModelMap[model]; ok {
+		model = mapped
+	} else {
+		model = s.cfg.ChatModelDefault
+	}
+	body, _ = sjson.SetBytes(body, "model", model)
+
+	if !gjson.GetBytes(body, "function_call").Exists() {
+		messages := gjson.GetBytes(body, "messages").Array()
+		lastIndex := len(messages) - 1
+		if !strings.Contains(messages[lastIndex].Get("content").String(), "Respond in the following locale") {
+			locale := s.cfg.ChatLocale
+			if locale == "" {
+				locale = "zh_CN"
+			}
+			body, _ = sjson.SetBytes(body, fmt.Sprintf("messages.%d.content", lastIndex), messages[lastIndex].Get("content").String()+"Respond in the following locale: "+locale+".")
+		}
+	}
+
+	body, _ = sjson.DeleteBytes(body, "intent")
+	body, _ = sjson.DeleteBytes(body, "intent_threshold")
+	body, _ = sjson.DeleteBytes(body, "intent_content")
+
+	maxTokens := gjson.GetBytes(body, "max_tokens").Int()
+	if int(maxTokens) > s.cfg.ChatMaxTokens {
+		body, _ = sjson.SetBytes(body, "max_tokens", s.cfg.ChatMaxTokens)
+	}
+
+	return body
 }
 
 func AuthMiddleware(authToken string) gin.HandlerFunc {
@@ -274,4 +359,17 @@ func getClient(cfg *ServiceConfig) (*http.Client, error) {
 	}
 
 	return client, nil
+}
+
+func abortCodex(c *gin.Context, status int) {
+	c.Header("Content-Type", "text/event-stream")
+
+	c.String(status, "data: [DONE]\n")
+	c.Abort()
+}
+
+func abortChat(c *gin.Context, status int) {
+	c.Header("Content-Type", "application/json")
+	c.JSON(status, gin.H{"error": "Chat completion failed"})
+	c.Abort()
 }
