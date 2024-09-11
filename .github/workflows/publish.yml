@@ -1,0 +1,77 @@
+name: Build and Publish
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: macos-latest
+            platform: macos
+          - os: windows-latest
+            platform: windows
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get project name
+        id: project_name
+        run: |
+          if [ -f package.json ]; then
+            echo "::set-output name=name::$(node -p "require('./package.json').name")"
+          elif [ -f Makefile ]; then
+            echo "::set-output name=name::$(grep "BINARY_NAME" Makefile | cut -d '=' -f2 | tr -d ' ')"
+          else
+            echo "::set-output name=name::ldor"
+          fi
+        shell: bash
+
+      - name: Build
+        run: make
+        shell: bash
+
+      - name: Get architecture
+        id: arch
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            echo "::set-output name=arch::$(echo $PROCESSOR_ARCHITECTURE | tr '[:upper:]' '[:lower:]')"
+          else
+            echo "::set-output name=arch::$(uname -m)"
+          fi
+        shell: bash
+
+      - name: Rename and zip binary
+        run: |
+          mv ${{ steps.project_name.outputs.name }} ${{ steps.project_name.outputs.name }}-${{ matrix.platform }}-${{ steps.arch.outputs.arch }}
+          zip ${{ steps.project_name.outputs.name }}-${{ matrix.platform }}-${{ steps.arch.outputs.arch }}.zip ${{ steps.project_name.outputs.name }}-${{ matrix.platform }}-${{ steps.arch.outputs.arch }}
+        shell: bash
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.project_name.outputs.name }}-${{ matrix.platform }}-${{ steps.arch.outputs.arch }}.zip
+          path: ${{ steps.project_name.outputs.name }}-${{ matrix.platform }}-${{ steps.arch.outputs.arch }}.zip
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: "*-*-*.zip"
+          generate_release_notes: |
+            echo "Release ${{ github.ref_name }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
