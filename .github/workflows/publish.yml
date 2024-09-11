@@ -53,10 +53,14 @@ jobs:
           fi
         shell: bash
 
-      - name: File Suffix (Windows)
-        if: ${{ matrix.os = 'windows' }}
+      - name: Prepare binary (Windows)
         run: |
-          mv bin/${{ steps.project_name.outputs.name }} bin/${{ steps.project_name.outputs.name }}.exe
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            if [ ! -f "bin/${{ steps.project_name.outputs.name }}.exe" ]; then
+              mv bin/${{ steps.project_name.outputs.name }} bin/${{ steps.project_name.outputs.name }}.exe || exit 1
+            fi
+          fi
+        shell: bash
 
       - name: Get architecture
         id: arch
