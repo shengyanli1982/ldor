@@ -76,14 +76,21 @@ jobs:
 
       - name: Rename and zip binary
         run: |
-          zip ${{ steps.project_name.outputs.name }}-${{ matrix.platform }}-${{ steps.arch.outputs.arch }}.zip bin/${{ steps.project_name.outputs.name }}
+          mkdir -p artifacts
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            mv bin/${{ steps.project_name.outputs.name }}.exe artifacts/${{ steps.project_name.outputs.name }}.exe
+            cd artifacts && zip ${{ steps.project_name.outputs.name }}-${{ matrix.platform }}-${{ matrix.arch }}.zip ${{ steps.project_name.outputs.name }}.exe
+          else
+            mv bin/${{ steps.project_name.outputs.name }} artifacts/${{ steps.project_name.outputs.name }}
+            cd artifacts && zip ${{ steps.project_name.outputs.name }}-${{ matrix.platform }}-${{ matrix.arch }}.zip ${{ steps.project_name.outputs.name }}
+          fi
         shell: bash
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.project_name.outputs.name }}-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.run_id }}
-          path: ${{ steps.project_name.outputs.name }}-${{ matrix.platform }}-${{ matrix.arch }}.zip
+          path: artifacts/${{ steps.project_name.outputs.name }}-${{ matrix.platform }}-${{ matrix.arch }}.zip
 
   publish:
     needs: build
