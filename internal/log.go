@@ -9,16 +9,14 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-// Logger wraps zap.Logger
 type Logger struct {
 	l *zap.Logger
 }
 
-// customEncoder handles custom encoding for various types
 func customEncoder(value interface{}, enc zapcore.PrimitiveArrayEncoder) {
 	switch v := value.(type) {
 	case time.Time:
-		enc.AppendString(v.Format("2006-01-02 15:04:05.000") + " |")
+		enc.AppendString(v.Format("2006-01-02T15:04:05.000Z0700") + " |")
 	case zapcore.EntryCaller:
 		enc.AppendString(v.TrimmedPath() + " |")
 	case time.Duration:
@@ -32,7 +30,6 @@ func customEncoder(value interface{}, enc zapcore.PrimitiveArrayEncoder) {
 	}
 }
 
-// PlainTextLogEncodingConfig defines the encoding configuration for plain text logs
 var PlainTextLogEncodingConfig = zapcore.EncoderConfig{
 	TimeKey:        "time",
 	LevelKey:       "level",
@@ -48,21 +45,15 @@ var PlainTextLogEncodingConfig = zapcore.EncoderConfig{
 	EncodeName:     func(name string, enc zapcore.PrimitiveArrayEncoder) { customEncoder(name, enc) },
 }
 
-// NewLogger creates a new Logger instance
 func NewLogger(ws zapcore.WriteSyncer, opts ...zap.Option) *Logger {
 	if ws == nil {
 		ws = zapcore.AddSync(os.Stdout)
 	}
 
-	core := zapcore.NewCore(
-		zapcore.NewConsoleEncoder(PlainTextLogEncodingConfig),
-		ws,
-		zap.NewAtomicLevelAt(zap.DebugLevel),
-	)
+	core := zapcore.NewCore(zapcore.NewConsoleEncoder(PlainTextLogEncodingConfig), ws, zap.NewAtomicLevelAt(zap.DebugLevel))
 	return &Logger{l: zap.New(core, zap.AddCaller()).WithOptions(opts...)}
 }
 
-// GetZapSugaredLogger returns a SugaredLogger instance
 func (l *Logger) GetZapSugaredLogger() *zap.SugaredLogger {
 	return l.l.Sugar()
 }

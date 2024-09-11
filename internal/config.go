@@ -14,7 +14,7 @@ const (
 	DefaultApiBase        = "https://api.openai.com/v1"
 	DefaultMaxTokens      = 2048
 	DefaultLanguage       = "zh_CN"
-	DefaultRequestsPerSec = math.MaxUint8
+	DefaultRequestsPerSec = math.MaxInt16
 )
 
 type ServiceConfig struct {
@@ -96,7 +96,7 @@ func (c *ServiceConfig) String() string {
 	b := bytes.NewBuffer(make([]byte, 0, 2048))
 	b.WriteString("> Bind: " + c.Bind + "\n")
 	b.WriteString("> ProxyUrl: " + c.ProxyUrl + "\n")
-	b.WriteString("> Timeout: " + strconv.Itoa(c.Timeout) + "\n")
+	b.WriteString("> Timeout(Second): " + strconv.Itoa(c.Timeout) + "\n")
 	b.WriteString("> TotalRequestsPerSec: " + strconv.Itoa(c.TotalRequestsPerSec) + "\n")
 	b.WriteString("> CodexApiBase: " + c.CodexApiBase + "\n")
 	b.WriteString("> CodexApiOrganization: " + c.CodexApiOrganization + "\n")
