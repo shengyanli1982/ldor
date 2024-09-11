@@ -8,11 +8,11 @@ ENV GO111MODULE=on \
     GOOS=linux
 
 # 复制 go.mod 和 go.sum 文件并下载依赖
-COPY go.mod go.sum ./
+WORKDIR /build
+COPY . .
 RUN go mod download
 
 # 复制源代码并构建
-COPY . .
 RUN go build -tags=jsoniter -ldflags="-w -s" -o ldor
 
 # 第二阶段：运行
@@ -22,7 +22,7 @@ FROM alpine:3.18
 WORKDIR /app
 
 # 从构建阶段复制二进制文件和配置文件
-COPY --from=builder /go/ldor /app/ldor
+COPY --from=builder /build/ldor /app/ldor
 COPY config.json /app
 
 # 设置时区和权限
