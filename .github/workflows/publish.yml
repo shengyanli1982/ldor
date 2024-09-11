@@ -14,10 +14,16 @@ jobs:
         include:
           - os: ubuntu-latest
             platform: linux
+            arch: amd64
           - os: macos-latest
             platform: macos
+            arch: amd64
+          - os: macos-latest
+            platform: macos
+            arch: arm64
           - os: windows-latest
             platform: windows
+            arch: amd64
 
     steps:
       - uses: actions/checkout@v4
@@ -55,7 +61,7 @@ jobs:
 
       - name: Rename and zip binary
         run: |
-          zip ${{ steps.project_name.outputs.name }}-${{ matrix.platform }}-${{ steps.arch.outputs.arch }}.zip ${{ steps.project_name.outputs.name }}
+          zip ${{ steps.project_name.outputs.name }}-${{ matrix.platform }}-${{ steps.arch.outputs.arch }}.zip bin/${{ steps.project_name.outputs.name }}
         shell: bash
 
       - name: Upload artifact
