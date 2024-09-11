@@ -54,10 +54,9 @@ jobs:
         shell: bash
 
       - name: File Suffix (Windows)
-        run : |
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            mv bin/${{ steps.project_name.outputs.name }} bin/${{ steps.project_name.outputs.name }}.exe
-          fi
+        if: ${{ matrix.os = 'windows' }}
+        run: |
+          mv bin/${{ steps.project_name.outputs.name }} bin/${{ steps.project_name.outputs.name }}.exe
 
       - name: Get architecture
         id: arch
