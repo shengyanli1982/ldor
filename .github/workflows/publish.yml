@@ -1,122 +1,122 @@
 name: Build and Publish
 
 on:
-  release:
-    types: [created]
+    release:
+        types: [created]
 
 jobs:
-  build:
-    name: Build on ${{ matrix.os }} (${{ matrix.arch }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            platform: linux
-            arch: amd64
-          - os: macos-latest
-            platform: macos
-            arch: amd64
-          - os: macos-latest
-            platform: macos
-            arch: arm64
-          - os: windows-latest
-            platform: windows
-            arch: amd64
+    build:
+        name: Build on ${{ matrix.os }} (${{ matrix.arch }})
+        runs-on: ${{ matrix.os }}
+        strategy:
+            matrix:
+                include:
+                    - os: ubuntu-latest
+                      platform: linux
+                      arch: amd64
+                    - os: macos-latest
+                      platform: macos
+                      arch: amd64
+                    - os: macos-latest
+                      platform: macos
+                      arch: arm64
+                    - os: windows-latest
+                      platform: windows
+                      arch: amd64
 
-    steps:
-      - uses: actions/checkout@v4
+        steps:
+            - uses: actions/checkout@v4
 
-      - name: Install Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: "1.21"
+            - name: Install Go
+              uses: actions/setup-go@v4
+              with:
+                  go-version: "1.21"
 
-      - name: Get project name
-        id: project_name
-        run: |
-          if [ -f package.json ]; then
-            echo "::set-output name=name::$(node -p "require('./package.json').name")"
-          elif [ -f Makefile ]; then
-            echo "::set-output name=name::$(grep "BINARY_NAME" Makefile | cut -d '=' -f2 | tr -d ' ')"
-          else
-            echo "::set-output name=name::ldor"
-          fi
-        shell: bash
+            - name: Get project name
+              id: project_name
+              run: |
+                  if [ -f package.json ]; then
+                    echo "::set-output name=name::$(node -p "require('./package.json').name")"
+                  elif [ -f Makefile ]; then
+                    echo "::set-output name=name::$(grep "BINARY_NAME" Makefile | cut -d '=' -f2 | tr -d ' ')"
+                  else
+                    echo "::set-output name=name::ldor"
+                  fi
+              shell: bash
 
-      - name: Build
-        run: |
-          if [ "${{ matrix.os }}" = "macos-latest" ] && [ "${{ matrix.arch }}" = "arm64" ]; then
-            GOARCH=arm64 make
-          else
-            make
-          fi
-        shell: bash
+            - name: Build
+              run: |
+                  if [ "${{ matrix.os }}" = "macos-latest" ] && [ "${{ matrix.arch }}" = "arm64" ]; then
+                    GOARCH=arm64 make
+                  else
+                    make
+                  fi
+              shell: bash
 
-      - name: Prepare binary (Windows)
-        run: |
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            if [ ! -f "bin/${{ steps.project_name.outputs.name }}.exe" ]; then
-              mv bin/${{ steps.project_name.outputs.name }} bin/${{ steps.project_name.outputs.name }}.exe || exit 1
-            fi
-          fi
-        shell: bash
+            - name: Prepare binary (Windows)
+              run: |
+                  if [ "${{ runner.os }}" = "Windows" ]; then
+                    if [ ! -f "bin/${{ steps.project_name.outputs.name }}.exe" ]; then
+                      mv bin/${{ steps.project_name.outputs.name }} bin/${{ steps.project_name.outputs.name }}.exe || exit 1
+                    fi
+                  fi
+              shell: bash
 
-      - name: Get architecture
-        id: arch
-        run: |
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            echo "::set-output name=arch::$(echo $PROCESSOR_ARCHITECTURE | tr '[:upper:]' '[:lower:]')"
-          else
-            echo "::set-output name=arch::$(uname -m)"
-          fi
-        shell: bash
+            - name: Get architecture
+              id: arch
+              run: |
+                  if [ "${{ runner.os }}" = "Windows" ]; then
+                    echo "::set-output name=arch::$(echo $PROCESSOR_ARCHITECTURE | tr '[:upper:]' '[:lower:]')"
+                  else
+                    echo "::set-output name=arch::$(uname -m)"
+                  fi
+              shell: bash
 
-      - name: Install zip
-        run: |
-          if [ "${{ runner.os }}" = "Linux" ]; then
-            sudo apt-get update && sudo apt-get install -y zip
-          elif [ "${{ runner.os }}" = "macOS" ]; then
-            brew install zip
-          elif [ "${{ runner.os }}" = "Windows" ]; then
-            choco install zip
-          fi
-        shell: bash
+            - name: Install zip
+              run: |
+                  if [ "${{ runner.os }}" = "Linux" ]; then
+                    sudo apt-get update && sudo apt-get install -y zip
+                  elif [ "${{ runner.os }}" = "macOS" ]; then
+                    brew install zip
+                  elif [ "${{ runner.os }}" = "Windows" ]; then
+                    choco install zip
+                  fi
+              shell: bash
 
-      - name: Rename and zip binary
-        run: |
-          mkdir -p artifacts
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            mv bin/${{ steps.project_name.outputs.name }}.exe artifacts/${{ steps.project_name.outputs.name }}.exe
-            cd artifacts && zip ${{ steps.project_name.outputs.name }}-${{ matrix.platform }}-${{ matrix.arch }}.zip ${{ steps.project_name.outputs.name }}.exe
-          else
-            mv bin/${{ steps.project_name.outputs.name }} artifacts/${{ steps.project_name.outputs.name }}
-            cd artifacts && zip ${{ steps.project_name.outputs.name }}-${{ matrix.platform }}-${{ matrix.arch }}.zip ${{ steps.project_name.outputs.name }}
-          fi
-        shell: bash
+            - name: Rename and zip binary
+              run: |
+                  mkdir -p artifacts
+                  if [ "${{ runner.os }}" = "Windows" ]; then
+                    mv bin/${{ steps.project_name.outputs.name }}.exe artifacts/${{ steps.project_name.outputs.name }}.exe
+                    cd artifacts && zip ${{ steps.project_name.outputs.name }}-${{ matrix.platform }}-${{ matrix.arch }}.zip ${{ steps.project_name.outputs.name }}.exe
+                  else
+                    mv bin/${{ steps.project_name.outputs.name }} artifacts/${{ steps.project_name.outputs.name }}
+                    cd artifacts && zip ${{ steps.project_name.outputs.name }}-${{ matrix.platform }}-${{ matrix.arch }}.zip ${{ steps.project_name.outputs.name }}
+                  fi
+              shell: bash
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.project_name.outputs.name }}-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.run_id }}
-          path: artifacts/${{ steps.project_name.outputs.name }}-${{ matrix.platform }}-${{ matrix.arch }}.zip
+            - name: Upload artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: ${{ steps.project_name.outputs.name }}-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.run_id }}
+                  path: artifacts/${{ steps.project_name.outputs.name }}-${{ matrix.platform }}-${{ matrix.arch }}.zip
 
-  publish:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: ./artifacts
+    publish:
+        needs: build
+        runs-on: ubuntu-latest
+        steps:
+            - name: Download artifacts
+              uses: actions/download-artifact@v4
+              with:
+                  path: ./artifacts
 
-      - name: Display structure of downloaded files
-        run: ls -R
-        working-directory: ./artifacts
+            - name: Display structure of downloaded files
+              run: ls -R
+              working-directory: ./artifacts
 
-      - name: Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: ./artifacts/**/*.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            - name: Release
+              uses: softprops/action-gh-release@v2
+              with:
+                  files: ./artifacts/**/*.zip
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

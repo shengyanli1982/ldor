@@ -1,0 +1,12 @@
+services:
+    ldor-app:
+        image: ldor:latest
+        container_name: ldor
+        restart: always
+        build:
+            context: .
+            dockerfile: Dockerfile
+        volumes:
+            - ./config.json:/app/config.json
+        ports:
+            - "8181:8181"
