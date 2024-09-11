@@ -6,11 +6,10 @@ on:
 
 jobs:
   build:
-    name: Build on ${{ matrix.os }}
+    name: Build on ${{ matrix.os }} (${{ matrix.arch }})
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
         include:
           - os: ubuntu-latest
             platform: linux
@@ -28,7 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Go
+      - name: Install Go
         uses: actions/setup-go@v4
         with:
           go-version: "1.21"
@@ -46,7 +45,12 @@ jobs:
         shell: bash
 
       - name: Build
-        run: make
+        run: |
+          if [ "${{ matrix.os }}" = "macos-latest" ] && [ "${{ matrix.arch }}" = "arm64" ]; then
+            GOARCH=arm64 make
+          else
+            make
+          fi
         shell: bash
 
       - name: Get architecture
@@ -56,6 +60,17 @@ jobs:
             echo "::set-output name=arch::$(echo $PROCESSOR_ARCHITECTURE | tr '[:upper:]' '[:lower:]')"
           else
             echo "::set-output name=arch::$(uname -m)"
+          fi
+        shell: bash
+
+      - name: Install zip
+        run: |
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            sudo apt-get update && sudo apt-get install -y zip
+          elif [ "${{ runner.os }}" = "macOS" ]; then
+            brew install zip
+          elif [ "${{ runner.os }}" = "Windows" ]; then
+            choco install zip
           fi
         shell: bash
 
