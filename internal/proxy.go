@@ -122,7 +122,12 @@ func (s *ProxyService) chatCompletions(c *gin.Context) {
 		return
 	}
 
-	body = s.constructChatRequestBody(body)
+	body, err = s.constructChatRequestBody(body)
+	if err != nil {
+		s.log.Errorf("Failed to construct chat request body: %v", err)
+		abortWithError(c, http.StatusInternalServerError, "Failed to construct chat request body")
+		return
+	}
 
 	proxyURL := s.cfg.ChatApiBase + "/chat/completions"
 	req, err := createProxyRequest(ctx, http.MethodPost, proxyURL, body, s.cfg.ChatApiKey, s.cfg.ChatApiOrganization, s.cfg.ChatApiProject)
@@ -197,37 +202,93 @@ func abortWithError(c *gin.Context, status int, message string) {
 	c.AbortWithStatusJSON(status, gin.H{"error": message})
 }
 
-func (s *ProxyService) constructChatRequestBody(body []byte) []byte {
-	model := gjson.GetBytes(body, "model").String()
-	if mapped, ok := s.cfg.ChatModelMap[model]; ok {
-		model = mapped
-	} else {
-		model = s.cfg.ChatModelDefault
-	}
-	body, _ = sjson.SetBytes(body, "model", model)
+func (s *ProxyService) constructChatRequestBody(body []byte) ([]byte, error) {
+	var err error
 
-	if !gjson.GetBytes(body, "function_call").Exists() {
-		messages := gjson.GetBytes(body, "messages").Array()
-		lastIndex := len(messages) - 1
-		if !strings.Contains(messages[lastIndex].Get("content").String(), "Respond in the following locale") {
-			locale := s.cfg.ChatLocale
-			if locale == "" {
-				locale = DefaultLocale
-			}
-			body, _ = sjson.SetBytes(body, fmt.Sprintf("messages.%d.content", lastIndex), messages[lastIndex].Get("content").String()+"Respond in the following locale: "+locale+".")
+	// Set model
+	body, err = s.setModelIfMapped(body, "model", s.cfg.ChatModelMap, s.cfg.ChatModelDefault)
+	if err != nil {
+		return nil, err
+	}
+
+	// Set locale if necessary
+	body, err = s.setLocaleIfNeeded(body)
+	if err != nil {
+		return nil, err
+	}
+
+	// Delete unnecessary fields
+	fieldsToDelete := []string{"intent", "intent_threshold", "intent_content"}
+	if body, err = s.deleteFields(body, fieldsToDelete); err != nil {
+		return nil, err
+	}
+
+	// Set max_tokens if necessary
+	body, err = s.setMaxTokensIfExceeded(body, "max_tokens", s.cfg.ChatMaxTokens)
+	if err != nil {
+		return nil, err
+	}
+
+	return body, nil
+}
+
+func (s *ProxyService) setModelIfMapped(body []byte, key string, modelMap map[string]string, defaultModel string) ([]byte, error) {
+	model := modelMap[gjson.GetBytes(body, key).String()]
+	if model == "" {
+		model = defaultModel
+	}
+	return s.setJSONField(body, key, model)
+}
+
+func (s *ProxyService) setLocaleIfNeeded(body []byte) ([]byte, error) {
+	if gjson.GetBytes(body, "function_call").Exists() {
+		return body, nil
+	}
+
+	messages := gjson.GetBytes(body, "messages").Array()
+	lastMsg := messages[len(messages)-1].Get("content").String()
+	if strings.Contains(lastMsg, "Respond in the following locale") {
+		return body, nil
+	}
+
+	locale := s.cfg.ChatLocale
+	if locale == "" {
+		locale = DefaultLocale
+	}
+	newContent := lastMsg + "Respond in the following locale: " + locale + "."
+	return s.setJSONField(body, fmt.Sprintf("messages.%d.content", len(messages)-1), newContent)
+}
+
+func (s *ProxyService) deleteFields(body []byte, fields []string) ([]byte, error) {
+	var err error
+	for _, field := range fields {
+		body, err = sjson.DeleteBytes(body, field)
+		if err != nil {
+			return nil, s.logError("deleting "+field, err)
 		}
 	}
+	return body, nil
+}
 
-	body, _ = sjson.DeleteBytes(body, "intent")
-	body, _ = sjson.DeleteBytes(body, "intent_threshold")
-	body, _ = sjson.DeleteBytes(body, "intent_content")
-
-	maxTokens := gjson.GetBytes(body, "max_tokens").Int()
-	if int(maxTokens) > s.cfg.ChatMaxTokens {
-		body, _ = sjson.SetBytes(body, "max_tokens", s.cfg.ChatMaxTokens)
+func (s *ProxyService) setMaxTokensIfExceeded(body []byte, key string, maxAllowed int) ([]byte, error) {
+	maxTokens := gjson.GetBytes(body, key).Int()
+	if int(maxTokens) > maxAllowed {
+		return s.setJSONField(body, key, maxAllowed)
 	}
+	return body, nil
+}
 
-	return body
+func (s *ProxyService) setJSONField(body []byte, key string, value interface{}) ([]byte, error) {
+	newBody, err := sjson.SetBytes(body, key, value)
+	if err != nil {
+		return nil, s.logError("setting "+key, err)
+	}
+	return newBody, nil
+}
+
+func (s *ProxyService) logError(action string, err error) error {
+	s.log.Errorf("Error %s: %v", action, err)
+	return fmt.Errorf("%s: %w", action, err)
 }
 
 func AuthMiddleware(authToken string) gin.HandlerFunc {
@@ -246,12 +307,12 @@ func (s *ProxyService) constructCodeRequestBody(body []byte) []byte {
 	var err error
 	body, err = sjson.DeleteBytes(body, "extra")
 	if err != nil {
-		s.log.Warnf("Error deleting 'extra' field: %v", err)
+		s.log.Errorf("Error deleting 'extra' field: %v", err)
 	}
 
 	body, err = sjson.DeleteBytes(body, "nwo")
 	if err != nil {
-		s.log.Warnf("Error deleting 'nwo' field: %v", err)
+		s.log.Errorf("Error deleting 'nwo' field: %v", err)
 	}
 
 	body, err = sjson.SetBytes(body, "model", s.cfg.CodeInstructModel)
