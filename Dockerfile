@@ -1,10 +1,10 @@
 FROM golang:1.21 as builder 
 
-ENV GO111MODULE=on GOPROXY=https://goproxy.cn,direct
-RUN go mod download
-    
-RUN  GO111MODULE=on CGO_ENABLED=0 GOOS=linux go build -tags=jsoniter -ldflags="-w -s" -o ldor
+WORKDIR /build
+COPY . ./
 
+RUN GOPROXY=https://goproxy.cn,direct go mod download
+RUN GO111MODULE=on CGO_ENABLED=0 GOOS=linux go build -tags=jsoniter -ldflags="-w -s" -o ldor
 
 FROM alpine:3.18
 
