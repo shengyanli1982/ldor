@@ -31,34 +31,27 @@ func main() {
 	cmd := cobra.Command{
 		Use:   "ldor",
 		Short: "ldor is copilot(linux do) override service",
-		Long:  "ldor is a proxy service that forwards requests to a target server and returns the response. ",
+		Long:  "ldor is a proxy service that forwards requests to a target server and returns the response.",
 	}
 	cmd.Flags().StringVarP(&configPath, "config", "c", "./config.json", "Configuration file path")
 	cmd.Flags().BoolVarP(&releaseMode, "release", "r", false, "Set release mode")
 	cmd.Flags().BoolVarP(&plainLogMode, "plain", "p", false, "Set plain text log mode, default is json log mode (only valid in release mode)")
 
 	command.PrettyCobraHelpAndUsage(&cmd)
-	err := cmd.Execute()
-	if err != nil {
-		fmt.Printf("Failed to execute command: %v\n", err)
+	if err := cmd.Execute(); err != nil {
+		fmt.Printf("Failed to execute command: %v", err)
 		os.Exit(-1)
 	}
 
-	cfg := il.NewServiceConfig()
-	err = cfg.LoadConfig(configPath)
+	cfg, err := loadConfig(configPath)
 	if err != nil {
-		fmt.Printf("Failed to load config: %v\n", err)
+		fmt.Printf("Failed to load config: %v", err)
 		os.Exit(-1)
 	}
 
-	host, p, err := net.SplitHostPort(cfg.Bind)
+	host, port, err := parseBindAddress(cfg.Bind)
 	if err != nil {
-		fmt.Printf("Failed to parse bind address: %v\n", err)
-		os.Exit(-1)
-	}
-	port, err := strconv.Atoi(p)
-	if err != nil {
-		fmt.Printf("Failed to conv port: %v\n", err)
+		fmt.Printf("Failed to parse bind address: %v", err)
 		os.Exit(-1)
 	}
 
@@ -76,7 +69,6 @@ func main() {
 		} else {
 			logger = log.NewLogger(zapcore.AddSync(asyncWriter)).GetZapSugaredLogger().Named("default")
 		}
-
 	} else {
 		fmt.Printf("Loading config: [%s], Value:\n==========\n%s==========\n", configPath, cfg.String())
 		logger = il.NewLogger(zapcore.AddSync(os.Stdout)).GetZapSugaredLogger().Named("default")
@@ -92,7 +84,7 @@ func main() {
 	}
 
 	timeout := uint32(time.Duration(cfg.Timeout) * time.Second)
-	orbitConfig.WithSugaredLogger(logger).WithAddress(host).WithPort(uint16(port)).WithHttpReadTimeout(timeout).WithHttpReadTimeout(timeout).WithHttpWriteTimeout(timeout)
+	orbitConfig.WithSugaredLogger(logger).WithAddress(host).WithPort(uint16(port)).WithHttpReadTimeout(timeout).WithHttpWriteTimeout(timeout)
 
 	orbitEngine := orbit.NewEngine(orbitConfig, orbitOptions)
 	orbitEngine.RegisterService(proxyService)
@@ -108,4 +100,24 @@ func main() {
 	}
 
 	gs.WaitForForceSync(engineStopSignal, writerStopSignal)
+}
+
+func loadConfig(configPath string) (*il.ServiceConfig, error) {
+	cfg := il.NewServiceConfig()
+	if err := cfg.LoadConfig(configPath); err != nil {
+		return nil, err
+	}
+	return cfg, nil
+}
+
+func parseBindAddress(bind string) (string, int, error) {
+	host, p, err := net.SplitHostPort(bind)
+	if err != nil {
+		return "", 0, err
+	}
+	port, err := strconv.Atoi(p)
+	if err != nil {
+		return "", 0, err
+	}
+	return host, port, nil
 }

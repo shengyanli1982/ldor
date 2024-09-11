@@ -55,9 +55,11 @@ func (sc *ServiceConfig) LoadConfig(filePath string) error {
 		return fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
-	// 检查并设置默认值
+	sc.setDefaults()
+	return nil
+}
 
-	// 检查并设置默认值
+func (sc *ServiceConfig) setDefaults() {
 	if sc.Bind == "" {
 		sc.Bind = "127.0.0.1:8181"
 	}
@@ -88,8 +90,6 @@ func (sc *ServiceConfig) LoadConfig(filePath string) error {
 	if sc.TotalRequestsPerSec <= 0 {
 		sc.TotalRequestsPerSec = DefaultRequestsPerSec
 	}
-
-	return nil
 }
 
 func (c *ServiceConfig) String() string {
