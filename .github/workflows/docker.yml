@@ -33,7 +33,7 @@ jobs:
                   docker save $IMAGE_NAME:${{ github.ref_name }} > $IMAGE_NAME-${{ github.ref_name }}.tar
 
             - name: Debug - List files
-              run: ls -l
+              run: ls -lh
 
             - name: Create Release
               id: create_release
@@ -41,11 +41,11 @@ jobs:
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               with:
-                  files: ${{ env.IMAGE_NAME }}-${{ github.ref_name }}.tar
+                  files: ${{ steps.project_name.outputs.name }}-${{ github.ref_name }}.tar
                   draft: false
                   prerelease: false
 
             - name: Debug - Release Info
               run: |
                   echo "Release created with tag: ${{ github.ref_name }}"
-                  echo "Docker image tar file: ${{ env.IMAGE_NAME }}-${{ github.ref_name }}.tar"
+                  echo "Docker image tar file: ${{ steps.project_name.outputs.name }}-${{ github.ref_name }}.tar"
