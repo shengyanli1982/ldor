@@ -55,18 +55,30 @@ func NewProxyService(cfg *ServiceConfig, log *zap.SugaredLogger, rl *rl.RateLimi
 }
 
 func (ps *ProxyService) RegisterGroup(g *gin.RouterGroup) {
+	// Common routes
 	g.GET("/_ping", ps.pong)
 	g.GET("/models", ps.models)
 	g.GET("/v1/models", ps.models)
 
-	v1 := g.Group("/v1")
-	if ps.cfg.AuthToken != "" {
-		v1.Use(AuthMiddleware(ps.cfg.AuthToken))
-		v1 = v1.Group("/:token")
-	}
+	// Chat and code completion routes
+	chatRoute := "/chat/completions"
+	codeRoute := "/engines/copilot-codex/completions"
 
-	v1.POST("/chat/completions", ps.limiter.HandlerFunc(), ps.chatCompletions)
-	v1.POST("/engines/copilot-codex/completions", ps.limiter.HandlerFunc(), ps.codeCompletions)
+	if ps.cfg.AuthToken != "" {
+		// Authenticated routes
+		v1 := g.Group("/:token/v1", AuthMiddleware(ps.cfg.AuthToken))
+		v1.POST(chatRoute, ps.limiter.HandlerFunc(), ps.chatCompletions)
+		v1.POST(codeRoute, ps.limiter.HandlerFunc(), ps.codeCompletions)
+		v1.POST("/v1"+chatRoute, ps.limiter.HandlerFunc(), ps.chatCompletions)
+		v1.POST("/v1"+codeRoute, ps.limiter.HandlerFunc(), ps.codeCompletions)
+	} else {
+		// Unauthenticated routes
+		v1 := g.Group("/v1")
+		v1.POST(chatRoute, ps.limiter.HandlerFunc(), ps.chatCompletions)
+		v1.POST(codeRoute, ps.limiter.HandlerFunc(), ps.codeCompletions)
+		v1.POST("/v1"+chatRoute, ps.limiter.HandlerFunc(), ps.chatCompletions)
+		v1.POST("/v1"+codeRoute, ps.limiter.HandlerFunc(), ps.codeCompletions)
+	}
 }
 
 func (ps *ProxyService) pong(c *gin.Context) {
