@@ -56,8 +56,6 @@ func (sc *ServiceConfig) LoadConfig(filePath string) error {
 	}
 
 	// 检查并设置默认值
-
-	// 检查并设置默认值
 	if sc.Bind == "" {
 		sc.Bind = "127.0.0.1:8181"
 	}
