@@ -55,8 +55,7 @@ jobs:
 
       - name: Rename and zip binary
         run: |
-          mv ${{ steps.project_name.outputs.name }} ${{ steps.project_name.outputs.name }}-${{ matrix.platform }}-${{ steps.arch.outputs.arch }}
-          zip ${{ steps.project_name.outputs.name }}-${{ matrix.platform }}-${{ steps.arch.outputs.arch }}.zip ${{ steps.project_name.outputs.name }}-${{ matrix.platform }}-${{ steps.arch.outputs.arch }}
+          zip ${{ steps.project_name.outputs.name }}-${{ matrix.platform }}-${{ steps.arch.outputs.arch }}.zip ${{ steps.project_name.outputs.name }}
         shell: bash
 
       - name: Upload artifact
