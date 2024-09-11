@@ -53,6 +53,12 @@ jobs:
           fi
         shell: bash
 
+      - name: File Suffix (Windows)
+        run : |
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            mv bin/${{ steps.project_name.outputs.name }} bin/${{ steps.project_name.outputs.name }}.exe
+          fi
+
       - name: Get architecture
         id: arch
         run: |
