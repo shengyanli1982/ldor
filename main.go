@@ -5,7 +5,6 @@ import (
 	"net"
 	"os"
 	"strconv"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/shengyanli1982/gs"
@@ -83,7 +82,7 @@ func main() {
 		os.Exit(-1)
 	}
 
-	timeout := uint32(time.Duration(cfg.Timeout) * time.Second)
+	timeout := uint32(cfg.Timeout * 1000) // 秒转换为毫秒
 	orbitConfig.WithSugaredLogger(logger).WithAddress(host).WithPort(uint16(port)).WithHttpReadTimeout(timeout).WithHttpWriteTimeout(timeout)
 
 	orbitEngine := orbit.NewEngine(orbitConfig, orbitOptions)
