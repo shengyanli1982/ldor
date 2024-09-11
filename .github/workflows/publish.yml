@@ -82,8 +82,8 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.project_name.outputs.name }}-${{ matrix.platform }}-${{ steps.arch.outputs.arch }}.zip
-          path: ${{ steps.project_name.outputs.name }}-${{ matrix.platform }}-${{ steps.arch.outputs.arch }}.zip
+          name: ${{ steps.project_name.outputs.name }}-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.run_id }}
+          path: ${{ steps.project_name.outputs.name }}-${{ matrix.platform }}-${{ matrix.arch }}.zip
 
   publish:
     needs: build
