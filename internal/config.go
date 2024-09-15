@@ -10,38 +10,38 @@ import (
 )
 
 const (
-	DefaultInstructModel  = "gpt-3.5-turbo-instruct"
-	DefaultApiBase        = "https://api.openai.com/v1"
-	DefaultMaxTokens      = 2048
-	DefaultLanguage       = "zh_CN"
-	DefaultRequestsPerSec = math.MaxInt16
+	DefaultInstructionModel  = "gpt-3.5-turbo-instruct"
+	DefaultAPIBaseURL        = "https://api.openai.com/v1"
+	DefaultMaxTokenCount     = 2048
+	DefaultLocale            = "zh_CN"
+	DefaultRequestsPerSecond = math.MaxInt16
 )
 
 type ServiceConfig struct {
-	Bind                 string            `json:"bind,omitempty"`
-	ProxyUrl             string            `json:"proxy_url,omitempty"`
-	Timeout              int               `json:"timeout,omitempty"`
-	CodexApiBase         string            `json:"codex_api_base,omitempty"`
-	CodexApiKey          string            `json:"codex_api_key,omitempty"`
-	CodexApiOrganization string            `json:"codex_api_organization,omitempty"`
-	CodexApiProject      string            `json:"codex_api_project,omitempty"`
-	CodexMaxTokens       int               `json:"codex_max_tokens,omitempty"`
-	CodeInstructModel    string            `json:"code_instruct_model,omitempty"`
-	ChatApiBase          string            `json:"chat_api_base,omitempty"`
-	ChatApiKey           string            `json:"chat_api_key,omitempty"`
-	ChatApiOrganization  string            `json:"chat_api_organization,omitempty"`
-	ChatApiProject       string            `json:"chat_api_project,omitempty"`
-	ChatMaxTokens        int               `json:"chat_max_tokens,omitempty"`
-	ChatModelDefault     string            `json:"chat_model_default,omitempty"`
-	ChatModelMap         map[string]string `json:"chat_model_map,omitempty"`
+	BindAddress          string            `json:"bind,omitempty"`
+	ProxyURL             string            `json:"proxy_url,omitempty"`
+	TimeoutSeconds       int               `json:"timeout,omitempty"`
+	CodexAPIBaseURL      string            `json:"codex_api_base,omitempty"`
+	CodexAPIKey          string            `json:"codex_api_key,omitempty"`
+	CodexAPIOrganization string            `json:"codex_api_organization,omitempty"`
+	CodexAPIProject      string            `json:"codex_api_project,omitempty"`
+	CodexMaxTokenCount   int               `json:"codex_max_tokens,omitempty"`
+	CodeInstructionModel string            `json:"code_instruct_model,omitempty"`
+	ChatAPIBaseURL       string            `json:"chat_api_base,omitempty"`
+	ChatAPIKey           string            `json:"chat_api_key,omitempty"`
+	ChatAPIOrganization  string            `json:"chat_api_organization,omitempty"`
+	ChatAPIProject       string            `json:"chat_api_project,omitempty"`
+	ChatMaxTokenCount    int               `json:"chat_max_tokens,omitempty"`
+	ChatDefaultModel     string            `json:"chat_model_default,omitempty"`
+	ChatModelMapping     map[string]string `json:"chat_model_map,omitempty"`
 	ChatLocale           string            `json:"chat_locale,omitempty"`
 	AuthToken            string            `json:"auth_token,omitempty"`
-	TotalRequestsPerSec  int               `json:"requests_per_sec,omitempty"`
+	MaxRequestsPerSecond int               `json:"requests_per_sec,omitempty"`
 }
 
 func NewServiceConfig() *ServiceConfig {
 	return &ServiceConfig{
-		ChatModelMap: make(map[string]string),
+		ChatModelMapping: make(map[string]string),
 	}
 }
 
@@ -60,55 +60,56 @@ func (sc *ServiceConfig) LoadConfig(filePath string) error {
 }
 
 func (sc *ServiceConfig) setDefaults() {
-	if sc.Bind == "" {
-		sc.Bind = "127.0.0.1:8181"
+	if sc.BindAddress == "" {
+		sc.BindAddress = "127.0.0.1:8181"
 	}
-	if sc.Timeout == 0 {
-		sc.Timeout = 600
+	if sc.TimeoutSeconds == 0 {
+		sc.TimeoutSeconds = 600
 	}
-	if sc.CodexApiBase == "" {
-		sc.CodexApiBase = DefaultApiBase
+	if sc.CodexAPIBaseURL == "" {
+		sc.CodexAPIBaseURL = DefaultAPIBaseURL
 	}
-	if sc.CodexMaxTokens == 0 {
-		sc.CodexMaxTokens = DefaultMaxTokens
+	if sc.CodexMaxTokenCount == 0 {
+		sc.CodexMaxTokenCount = DefaultMaxTokenCount
 	}
-	if sc.CodeInstructModel == "" {
-		sc.CodeInstructModel = DefaultInstructModel
+	if sc.CodeInstructionModel == "" {
+		sc.CodeInstructionModel = DefaultInstructionModel
 	}
-	if sc.ChatApiBase == "" {
-		sc.ChatApiBase = DefaultApiBase
+	if sc.ChatAPIBaseURL == "" {
+		sc.ChatAPIBaseURL = DefaultAPIBaseURL
 	}
-	if sc.ChatMaxTokens == 0 {
-		sc.ChatMaxTokens = DefaultMaxTokens
+	if sc.ChatMaxTokenCount == 0 {
+		sc.ChatMaxTokenCount = DefaultMaxTokenCount
 	}
-	if sc.ChatModelDefault == "" {
-		sc.ChatModelDefault = DefaultInstructModel
+	if sc.ChatDefaultModel == "" {
+		sc.ChatDefaultModel = DefaultInstructionModel
 	}
 	if sc.ChatLocale == "" {
-		sc.ChatLocale = DefaultLanguage
+		sc.ChatLocale = DefaultLocale
 	}
-	if sc.TotalRequestsPerSec <= 0 {
-		sc.TotalRequestsPerSec = DefaultRequestsPerSec
+	if sc.MaxRequestsPerSecond <= 0 {
+		sc.MaxRequestsPerSecond = DefaultRequestsPerSecond
 	}
 }
 
 func (c *ServiceConfig) String() string {
 	b := bytes.NewBuffer(make([]byte, 0, 2048))
-	b.WriteString("> Bind: " + c.Bind + "\n")
-	b.WriteString("> ProxyUrl: " + c.ProxyUrl + "\n")
-	b.WriteString("> Timeout(Second): " + strconv.Itoa(c.Timeout) + "\n")
-	b.WriteString("> TotalRequestsPerSec: " + strconv.Itoa(c.TotalRequestsPerSec) + "\n")
-	b.WriteString("> CodexApiBase: " + c.CodexApiBase + "\n")
-	b.WriteString("> CodexApiOrganization: " + c.CodexApiOrganization + "\n")
-	b.WriteString("> CodexApiProject: " + c.CodexApiProject + "\n")
-	b.WriteString("> CodexMaxTokens: " + strconv.Itoa(c.CodexMaxTokens) + "\n")
-	b.WriteString("> CodeInstructModel: " + c.CodeInstructModel + "\n")
-	b.WriteString("> ChatApiBase: " + c.ChatApiBase + "\n")
-	b.WriteString("> ChatApiOrganization: " + c.ChatApiOrganization + "\n")
-	b.WriteString("> ChatApiProject: " + c.ChatApiProject + "\n")
-	b.WriteString("> ChatMaxTokens: " + strconv.Itoa(c.ChatMaxTokens) + "\n")
-	b.WriteString("> ChatModelDefault: " + c.ChatModelDefault + "\n")
-	b.WriteString("> ChatModelMap: " + fmt.Sprintf("%v", c.ChatModelMap) + "\n")
+
+	b.WriteString("> BindAddress: " + c.BindAddress + "\n")
+	b.WriteString("> ProxyURL: " + c.ProxyURL + "\n")
+	b.WriteString("> TimeoutSeconds: " + strconv.Itoa(c.TimeoutSeconds) + "\n")
+	b.WriteString("> MaxRequestsPerSecond: " + strconv.Itoa(c.MaxRequestsPerSecond) + "\n")
+	b.WriteString("> CodexAPIBaseURL: " + c.CodexAPIBaseURL + "\n")
+	b.WriteString("> CodexAPIOrganization: " + c.CodexAPIOrganization + "\n")
+	b.WriteString("> CodexAPIProject: " + c.CodexAPIProject + "\n")
+	b.WriteString("> CodexMaxTokenCount: " + strconv.Itoa(c.CodexMaxTokenCount) + "\n")
+	b.WriteString("> CodeInstructionModel: " + c.CodeInstructionModel + "\n")
+	b.WriteString("> ChatAPIBaseURL: " + c.ChatAPIBaseURL + "\n")
+	b.WriteString("> ChatAPIOrganization: " + c.ChatAPIOrganization + "\n")
+	b.WriteString("> ChatAPIProject: " + c.ChatAPIProject + "\n")
+	b.WriteString("> ChatMaxTokenCount: " + strconv.Itoa(c.ChatMaxTokenCount) + "\n")
+	b.WriteString("> ChatDefaultModel: " + c.ChatDefaultModel + "\n")
+	b.WriteString("> ChatModelMapping: " + fmt.Sprintf("%v", c.ChatModelMapping) + "\n")
 
 	return b.String()
 }

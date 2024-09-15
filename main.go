@@ -51,13 +51,13 @@ func main() {
 		os.Exit(-1)
 	}
 
-	host, port, err := parseServerAddress(appConfig.Bind)
+	host, port, err := parseServerAddress(appConfig.BindAddress)
 	if err != nil {
 		fmt.Printf("Failed to parse bind address: %v", err)
 		os.Exit(-1)
 	}
 
-	rateLimiterConfig := rl.NewConfig().WithRate(float64(appConfig.TotalRequestsPerSec)).WithBurst(1)
+	rateLimiterConfig := rl.NewConfig().WithRate(float64(appConfig.MaxRequestsPerSecond)).WithBurst(1)
 	rateLimiter := rl.NewRateLimiter(rateLimiterConfig)
 
 	orbitConfig := orbit.NewConfig().WithAccessLogEventFunc(func(logger *zap.SugaredLogger, event *log.LogEvent) {
@@ -89,7 +89,7 @@ func main() {
 		os.Exit(-1)
 	}
 
-	timeoutMs := uint32(appConfig.Timeout * 1000) // Convert seconds to milliseconds
+	timeoutMs := uint32(appConfig.TimeoutSeconds * 1000) // Convert seconds to milliseconds
 	orbitConfig.WithSugaredLogger(logger).WithAddress(host).WithPort(uint16(port)).WithHttpReadTimeout(timeoutMs).WithHttpWriteTimeout(timeoutMs)
 
 	orbitEngine := orbit.NewEngine(orbitConfig, orbitOptions)

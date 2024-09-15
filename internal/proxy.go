@@ -22,7 +22,6 @@ import (
 const (
 	StableCodeModelPrefix = "stable-code"
 	DeepSeekCoderModel    = "deepseek-coder"
-	DefaultLocale         = "zh_CN"
 )
 
 var ErrorConfigureTransport = errors.New("config transport failed")
@@ -41,7 +40,7 @@ type ProxyService struct {
 }
 
 func NewProxyService(cfg *ServiceConfig, log *zap.SugaredLogger, rl *rl.RateLimiter) (*ProxyService, error) {
-	client, err := getClient(cfg)
+	client, err := createHTTPClient(cfg)
 	if nil != err {
 		return nil, err
 	}
@@ -56,9 +55,9 @@ func NewProxyService(cfg *ServiceConfig, log *zap.SugaredLogger, rl *rl.RateLimi
 
 func (ps *ProxyService) RegisterGroup(g *gin.RouterGroup) {
 	// Common routes
-	g.GET("/_ping", ps.pong)
-	g.GET("/models", ps.models)
-	g.GET("/v1/models", ps.models)
+	g.GET("/_ping", ps.handlePing)
+	g.GET("/models", ps.getAvailableModels)
+	g.GET("/v1/models", ps.getAvailableModels)
 
 	// Chat and code completion routes
 	chatRoute := "/chat/completions"
@@ -67,21 +66,21 @@ func (ps *ProxyService) RegisterGroup(g *gin.RouterGroup) {
 	if ps.cfg.AuthToken != "" {
 		// Authenticated routes
 		v1 := g.Group("/:token/v1", AuthMiddleware(ps.cfg.AuthToken))
-		v1.POST(chatRoute, ps.limiter.HandlerFunc(), ps.chatCompletions)
-		v1.POST(codeRoute, ps.limiter.HandlerFunc(), ps.codeCompletions)
-		v1.POST("/v1"+chatRoute, ps.limiter.HandlerFunc(), ps.chatCompletions)
-		v1.POST("/v1"+codeRoute, ps.limiter.HandlerFunc(), ps.codeCompletions)
+		v1.POST(chatRoute, ps.limiter.HandlerFunc(), ps.handleChatCompletions)
+		v1.POST(codeRoute, ps.limiter.HandlerFunc(), ps.handleCodeCompletions)
+		v1.POST("/v1"+chatRoute, ps.limiter.HandlerFunc(), ps.handleChatCompletions)
+		v1.POST("/v1"+codeRoute, ps.limiter.HandlerFunc(), ps.handleCodeCompletions)
 	} else {
 		// Unauthenticated routes
 		v1 := g.Group("/v1")
-		v1.POST(chatRoute, ps.limiter.HandlerFunc(), ps.chatCompletions)
-		v1.POST(codeRoute, ps.limiter.HandlerFunc(), ps.codeCompletions)
-		v1.POST("/v1"+chatRoute, ps.limiter.HandlerFunc(), ps.chatCompletions)
-		v1.POST("/v1"+codeRoute, ps.limiter.HandlerFunc(), ps.codeCompletions)
+		v1.POST(chatRoute, ps.limiter.HandlerFunc(), ps.handleChatCompletions)
+		v1.POST(codeRoute, ps.limiter.HandlerFunc(), ps.handleCodeCompletions)
+		v1.POST("/v1"+chatRoute, ps.limiter.HandlerFunc(), ps.handleChatCompletions)
+		v1.POST("/v1"+codeRoute, ps.limiter.HandlerFunc(), ps.handleCodeCompletions)
 	}
 }
 
-func (ps *ProxyService) pong(c *gin.Context) {
+func (ps *ProxyService) handlePing(c *gin.Context) {
 	c.JSON(http.StatusOK, Pong{
 		Now:    time.Now().Second(),
 		Status: "ok",
@@ -89,71 +88,71 @@ func (ps *ProxyService) pong(c *gin.Context) {
 	})
 }
 
-func (s *ProxyService) models(c *gin.Context) {
+func (s *ProxyService) getAvailableModels(c *gin.Context) {
 	c.JSON(http.StatusOK, defaultModels)
 }
 
-func (s *ProxyService) codeCompletions(c *gin.Context) {
+func (s *ProxyService) handleCodeCompletions(c *gin.Context) {
 	ctx := c.Request.Context()
 	if ctx.Err() != nil {
-		abortWithError(c, http.StatusRequestTimeout, "Request timeout")
+		respondWithError(c, http.StatusRequestTimeout, "Request timeout")
 		return
 	}
 
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		s.log.Errorf("Failed to read request body: %v", err)
-		abortWithError(c, http.StatusBadRequest, "Invalid request body")
+		respondWithError(c, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
-	body = s.constructCodeRequestBody(body)
+	body = s.prepareCodeRequestBody(body)
 
-	proxyURL := s.cfg.CodexApiBase + "/completions"
-	req, err := createProxyRequest(ctx, http.MethodPost, proxyURL, body, s.cfg.CodexApiKey, s.cfg.CodexApiOrganization, s.cfg.CodexApiProject)
+	proxyURL := s.cfg.CodexAPIBaseURL + "/completions"
+	req, err := createProxyRequest(ctx, http.MethodPost, proxyURL, body, s.cfg.CodexAPIKey, s.cfg.CodexAPIOrganization, s.cfg.CodexAPIProject)
 	if err != nil {
 		s.log.Errorf("Failed to create request: %v", err)
-		abortWithError(c, http.StatusInternalServerError, "Failed to create request")
+		respondWithError(c, http.StatusInternalServerError, "Failed to create request")
 		return
 	}
 
 	s.handleProxyRequest(c, req, "completions")
 }
 
-func (s *ProxyService) chatCompletions(c *gin.Context) {
+func (s *ProxyService) handleChatCompletions(c *gin.Context) {
 	ctx := c.Request.Context()
 	if ctx.Err() != nil {
-		abortWithError(c, http.StatusRequestTimeout, "Request timeout")
+		respondWithError(c, http.StatusRequestTimeout, "Request timeout")
 		return
 	}
 
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		s.log.Errorf("Failed to read request body: %v", err)
-		abortWithError(c, http.StatusBadRequest, "Invalid request body")
+		respondWithError(c, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
-	body, err = s.constructChatRequestBody(body)
+	body, err = s.prepareChatRequestBody(body)
 	if err != nil {
-		s.log.Errorf("Failed to construct chat request body: %v", err)
-		abortWithError(c, http.StatusInternalServerError, "Failed to construct chat request body")
+		s.log.Errorf("Failed to prepare chat request body: %v", err)
+		respondWithError(c, http.StatusInternalServerError, "Failed to prepare chat request body")
 		return
 	}
 
-	proxyURL := s.cfg.ChatApiBase + "/chat/completions"
-	req, err := createProxyRequest(ctx, http.MethodPost, proxyURL, body, s.cfg.ChatApiKey, s.cfg.ChatApiOrganization, s.cfg.ChatApiProject)
+	proxyURL := s.cfg.ChatAPIBaseURL + "/chat/completions"
+	req, err := createProxyRequest(ctx, http.MethodPost, proxyURL, body, s.cfg.ChatAPIKey, s.cfg.ChatAPIOrganization, s.cfg.ChatAPIProject)
 	if err != nil {
 		s.log.Errorf("Failed to create request: %v", err)
-		abortWithError(c, http.StatusInternalServerError, "Failed to create request")
+		respondWithError(c, http.StatusInternalServerError, "Failed to create request")
 		return
 	}
 
 	s.handleProxyRequest(c, req, "chat completions")
 }
 
-func createProxyRequest(ctx context.Context, method, url string, body []byte, apiKey, organization, project string) (*http.Request, error) {
-	req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(body))
+func createProxyRequest(ctx context.Context, method, targetURL string, body []byte, apiKey, organization, project string) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, method, targetURL, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -183,10 +182,10 @@ func (s *ProxyService) handleProxyRequest(c *gin.Context, req *http.Request, req
 
 func (s *ProxyService) handleProxyError(c *gin.Context, err error, requestType string) {
 	if errors.Is(err, context.Canceled) {
-		abortWithError(c, http.StatusRequestTimeout, "Request timeout")
+		respondWithError(c, http.StatusRequestTimeout, "Request timeout")
 	} else {
 		s.log.Errorf("Request %s failed: %v", requestType, err)
-		abortWithError(c, http.StatusInternalServerError, "Internal server error")
+		respondWithError(c, http.StatusInternalServerError, "Internal server error")
 	}
 }
 
@@ -194,7 +193,7 @@ func (s *ProxyService) handleProxyResponse(c *gin.Context, resp *http.Response, 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		s.log.Errorf("Request %s failed with status code %d: %s", requestType, resp.StatusCode, string(body))
-		abortWithError(c, resp.StatusCode, "Proxy request failed")
+		respondWithError(c, resp.StatusCode, "Proxy request failed")
 		return
 	}
 
@@ -209,16 +208,16 @@ func (s *ProxyService) handleProxyResponse(c *gin.Context, resp *http.Response, 
 	}
 }
 
-func abortWithError(c *gin.Context, status int, message string) {
+func respondWithError(c *gin.Context, status int, message string) {
 	c.Header("Content-Type", "application/json")
 	c.AbortWithStatusJSON(status, gin.H{"error": message})
 }
 
-func (s *ProxyService) constructChatRequestBody(body []byte) ([]byte, error) {
+func (s *ProxyService) prepareChatRequestBody(body []byte) ([]byte, error) {
 	var err error
 
 	// Set model
-	body, err = s.setModelIfMapped(body, "model", s.cfg.ChatModelMap, s.cfg.ChatModelDefault)
+	body, err = s.setModelIfMapped(body, "model", s.cfg.ChatModelMapping, s.cfg.ChatDefaultModel)
 	if err != nil {
 		return nil, err
 	}
@@ -236,7 +235,7 @@ func (s *ProxyService) constructChatRequestBody(body []byte) ([]byte, error) {
 	}
 
 	// Set max_tokens if necessary
-	body, err = s.setMaxTokensIfExceeded(body, "max_tokens", s.cfg.ChatMaxTokens)
+	body, err = s.setMaxTokensIfExceeded(body, "max_tokens", s.cfg.ChatMaxTokenCount)
 	if err != nil {
 		return nil, err
 	}
@@ -315,7 +314,7 @@ func AuthMiddleware(authToken string) gin.HandlerFunc {
 	}
 }
 
-func (s *ProxyService) constructCodeRequestBody(body []byte) []byte {
+func (s *ProxyService) prepareCodeRequestBody(body []byte) []byte {
 	var err error
 	body, err = sjson.DeleteBytes(body, "extra")
 	if err != nil {
@@ -327,23 +326,23 @@ func (s *ProxyService) constructCodeRequestBody(body []byte) []byte {
 		s.log.Errorf("Error deleting 'nwo' field: %v", err)
 	}
 
-	body, err = sjson.SetBytes(body, "model", s.cfg.CodeInstructModel)
+	body, err = sjson.SetBytes(body, "model", s.cfg.CodeInstructionModel)
 	if err != nil {
 		s.log.Errorf("Error setting model: %v", err)
 	}
 
 	maxTokens := gjson.GetBytes(body, "max_tokens").Int()
-	if int(maxTokens) > s.cfg.CodexMaxTokens {
-		body, err = sjson.SetBytes(body, "max_tokens", s.cfg.CodexMaxTokens)
+	if int(maxTokens) > s.cfg.CodexMaxTokenCount {
+		body, err = sjson.SetBytes(body, "max_tokens", s.cfg.CodexMaxTokenCount)
 		if err != nil {
 			s.log.Errorf("Error setting max_tokens: %v", err)
 		}
 	}
 
 	switch {
-	case strings.Contains(s.cfg.CodeInstructModel, StableCodeModelPrefix):
-		return s.constructWithStableCodeModel(body)
-	case strings.HasPrefix(s.cfg.CodeInstructModel, DeepSeekCoderModel):
+	case strings.Contains(s.cfg.CodeInstructionModel, StableCodeModelPrefix):
+		return s.prepareStableCodeModelRequest(body)
+	case strings.HasPrefix(s.cfg.CodeInstructionModel, DeepSeekCoderModel):
 		if gjson.GetBytes(body, "n").Int() > 1 {
 			body, err = sjson.SetBytes(body, "n", 1)
 			if err != nil {
@@ -356,7 +355,7 @@ func (s *ProxyService) constructCodeRequestBody(body []byte) []byte {
 	return body
 }
 
-func (s *ProxyService) constructWithStableCodeModel(body []byte) []byte {
+func (s *ProxyService) prepareStableCodeModelRequest(body []byte) []byte {
 	suffix := gjson.GetBytes(body, "suffix").String()
 	prompt := gjson.GetBytes(body, "prompt").String()
 	content := fmt.Sprintf("<fim_prefix>%s<fim_suffix>%s<fim_middle>", prompt, suffix)
@@ -367,10 +366,10 @@ func (s *ProxyService) constructWithStableCodeModel(body []byte) []byte {
 			"content": content,
 		},
 	}
-	return s.constructWithChatModel(body, messages)
+	return s.prepareChatModelRequest(body, messages)
 }
 
-func (s *ProxyService) constructWithChatModel(body []byte, messages interface{}) []byte {
+func (s *ProxyService) prepareChatModelRequest(body []byte, messages interface{}) []byte {
 	var err error
 	body, err = sjson.SetBytes(body, "messages", messages)
 	if err != nil {
@@ -385,7 +384,7 @@ func (s *ProxyService) constructWithChatModel(body []byte, messages interface{})
 	return []byte(jsonStr)
 }
 
-func getClient(cfg *ServiceConfig) (*http.Client, error) {
+func createHTTPClient(cfg *ServiceConfig) (*http.Client, error) {
 	transport := &http.Transport{
 		ForceAttemptHTTP2:   true,
 		DisableKeepAlives:   false,
@@ -398,8 +397,8 @@ func getClient(cfg *ServiceConfig) (*http.Client, error) {
 		return nil, fmt.Errorf("failed to configure HTTP/2 transport: %w", err)
 	}
 
-	if cfg.ProxyUrl != "" {
-		proxyURL, err := url.Parse(cfg.ProxyUrl)
+	if cfg.ProxyURL != "" {
+		proxyURL, err := url.Parse(cfg.ProxyURL)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse proxy URL: %w", err)
 		}
@@ -408,7 +407,7 @@ func getClient(cfg *ServiceConfig) (*http.Client, error) {
 
 	client := &http.Client{
 		Transport: transport,
-		Timeout:   time.Duration(cfg.Timeout) * time.Second,
+		Timeout:   time.Duration(cfg.TimeoutSeconds) * time.Second,
 	}
 
 	return client, nil
