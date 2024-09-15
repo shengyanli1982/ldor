@@ -20,8 +20,8 @@ import (
 )
 
 const (
-	StableCodeModelPrefix = "stable-code"
-	DeepSeekCoderModel    = "deepseek-coder"
+	StableCodeModel    = "stable-code"
+	DeepSeekCoderModel = "deepseek-coder"
 )
 
 var ErrorConfigureTransport = errors.New("config transport failed")
@@ -340,8 +340,10 @@ func (s *ProxyService) prepareCodeRequestBody(body []byte) []byte {
 	}
 
 	switch {
-	case strings.Contains(s.cfg.CodeInstructionModel, StableCodeModelPrefix):
+	// stable-code model
+	case strings.Contains(s.cfg.CodeInstructionModel, StableCodeModel):
 		return s.prepareStableCodeModelRequest(body)
+	// deepseek-coder model
 	case strings.HasPrefix(s.cfg.CodeInstructionModel, DeepSeekCoderModel):
 		if gjson.GetBytes(body, "n").Int() > 1 {
 			body, err = sjson.SetBytes(body, "n", 1)
@@ -349,7 +351,7 @@ func (s *ProxyService) prepareCodeRequestBody(body []byte) []byte {
 				s.log.Errorf("Error setting n: %v", err)
 			}
 		}
-		// TODO: Implement other cases if needed
+		// TODO: Implement other cases if needed (e.g. openai model)
 	}
 
 	return body
