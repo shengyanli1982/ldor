@@ -10,27 +10,27 @@ import (
 )
 
 type Logger struct {
-	l *zap.Logger
+	zapLogger *zap.Logger
 }
 
-func customEncoder(value interface{}, enc zapcore.PrimitiveArrayEncoder) {
-	switch v := value.(type) {
+func formatLogEntry(entry interface{}, encoder zapcore.PrimitiveArrayEncoder) {
+	switch typedEntry := entry.(type) {
 	case time.Time:
-		enc.AppendString(v.Format("2006-01-02T15:04:05.000Z0700") + " |")
+		encoder.AppendString(typedEntry.Format("2006-01-02T15:04:05.000Z0700") + " |")
 	case zapcore.EntryCaller:
-		enc.AppendString(v.TrimmedPath() + " |")
+		encoder.AppendString(typedEntry.TrimmedPath() + " |")
 	case time.Duration:
-		enc.AppendString(v.String() + " |")
+		encoder.AppendString(typedEntry.String() + " |")
 	case zapcore.Level:
-		enc.AppendString(v.CapitalString() + " |")
+		encoder.AppendString(typedEntry.CapitalString() + " |")
 	case string:
-		enc.AppendString(v + " |")
+		encoder.AppendString(typedEntry + " |")
 	default:
-		enc.AppendString(fmt.Sprintf("%v |", v))
+		encoder.AppendString(fmt.Sprintf("%v |", typedEntry))
 	}
 }
 
-var PlainTextLogEncodingConfig = zapcore.EncoderConfig{
+var CustomTextLogEncoderConfig = zapcore.EncoderConfig{
 	TimeKey:        "time",
 	LevelKey:       "level",
 	NameKey:        "logger",
@@ -38,22 +38,22 @@ var PlainTextLogEncodingConfig = zapcore.EncoderConfig{
 	MessageKey:     "msg",
 	StacktraceKey:  "stacktrace",
 	LineEnding:     zapcore.DefaultLineEnding,
-	EncodeTime:     func(t time.Time, enc zapcore.PrimitiveArrayEncoder) { customEncoder(t, enc) },
-	EncodeDuration: func(d time.Duration, enc zapcore.PrimitiveArrayEncoder) { customEncoder(d, enc) },
-	EncodeCaller:   func(caller zapcore.EntryCaller, enc zapcore.PrimitiveArrayEncoder) { customEncoder(caller, enc) },
-	EncodeLevel:    func(level zapcore.Level, enc zapcore.PrimitiveArrayEncoder) { customEncoder(level, enc) },
-	EncodeName:     func(name string, enc zapcore.PrimitiveArrayEncoder) { customEncoder(name, enc) },
+	EncodeTime:     func(t time.Time, enc zapcore.PrimitiveArrayEncoder) { formatLogEntry(t, enc) },
+	EncodeDuration: func(d time.Duration, enc zapcore.PrimitiveArrayEncoder) { formatLogEntry(d, enc) },
+	EncodeCaller:   func(caller zapcore.EntryCaller, enc zapcore.PrimitiveArrayEncoder) { formatLogEntry(caller, enc) },
+	EncodeLevel:    func(level zapcore.Level, enc zapcore.PrimitiveArrayEncoder) { formatLogEntry(level, enc) },
+	EncodeName:     func(name string, enc zapcore.PrimitiveArrayEncoder) { formatLogEntry(name, enc) },
 }
 
-func NewLogger(ws zapcore.WriteSyncer, opts ...zap.Option) *Logger {
-	if ws == nil {
-		ws = zapcore.AddSync(os.Stdout)
+func NewLogger(writeSyncer zapcore.WriteSyncer, options ...zap.Option) *Logger {
+	if writeSyncer == nil {
+		writeSyncer = zapcore.AddSync(os.Stdout)
 	}
 
-	core := zapcore.NewCore(zapcore.NewConsoleEncoder(PlainTextLogEncodingConfig), ws, zap.NewAtomicLevelAt(zap.DebugLevel))
-	return &Logger{l: zap.New(core, zap.AddCaller()).WithOptions(opts...)}
+	logCore := zapcore.NewCore(zapcore.NewConsoleEncoder(CustomTextLogEncoderConfig), writeSyncer, zap.NewAtomicLevelAt(zap.DebugLevel))
+	return &Logger{zapLogger: zap.New(logCore, zap.AddCaller()).WithOptions(options...)}
 }
 
-func (l *Logger) GetZapSugaredLogger() *zap.SugaredLogger {
-	return l.l.Sugar()
+func (cl *Logger) GetZapSugaredLogger() *zap.SugaredLogger {
+	return cl.zapLogger.Sugar()
 }
