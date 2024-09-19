@@ -13,6 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	rl "github.com/shengyanli1982/orbit-contrib/pkg/ratelimiter"
+	"github.com/shengyanli1982/retry"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 	"go.uber.org/zap"
@@ -26,6 +27,14 @@ const (
 
 var ErrorConfigureTransport = errors.New("config transport failed")
 
+type retryCallback struct {
+	logger *zap.SugaredLogger
+}
+
+func (rc *retryCallback) OnRetry(count int64, delay time.Duration, err error) {
+	rc.logger.Warnf("Retry attempt %d scheduled after %s, error: %v", count, delay, err)
+}
+
 type Pong struct {
 	Now    int    `json:"now"`
 	Status string `json:"status"`
@@ -37,19 +46,23 @@ type ProxyService struct {
 	log     *zap.SugaredLogger
 	cfg     *ServiceConfig
 	client  *http.Client
+	retrier *retry.Retry
 }
 
-func NewProxyService(cfg *ServiceConfig, log *zap.SugaredLogger, rl *rl.RateLimiter) (*ProxyService, error) {
-	client, err := createHTTPClient(cfg)
+func NewProxyService(config *ServiceConfig, logger *zap.SugaredLogger, limiter *rl.RateLimiter) (*ProxyService, error) {
+	httpClient, err := createHTTPClient(config)
 	if nil != err {
 		return nil, err
 	}
 
+	retryCfg := retry.NewConfig().WithCallback(&retryCallback{logger: logger}).WithInitDelay(500 * time.Millisecond)
+
 	return &ProxyService{
-		log:     log,
-		limiter: rl,
-		cfg:     cfg,
-		client:  client,
+		log:     logger,
+		limiter: limiter,
+		cfg:     config,
+		client:  httpClient,
+		retrier: retry.New(retryCfg),
 	}, nil
 }
 
@@ -170,7 +183,7 @@ func createProxyRequest(ctx context.Context, method, targetURL string, body []by
 }
 
 func (s *ProxyService) handleProxyRequest(c *gin.Context, req *http.Request, requestType string) {
-	resp, err := s.client.Do(req)
+	resp, err := s.executeHTTPRequestWithRetry(req)
 	if err != nil {
 		s.handleProxyError(c, err, requestType)
 		return
@@ -419,4 +432,16 @@ func createHTTPClient(cfg *ServiceConfig) (*http.Client, error) {
 	}
 
 	return client, nil
+}
+
+func (s *ProxyService) executeHTTPRequestWithRetry(req *http.Request) (*http.Response, error) {
+	result := s.retrier.TryOnConflict(func() (interface{}, error) {
+		return s.client.Do(req)
+	})
+
+	if !result.IsSuccess() {
+		return nil, result.TryError()
+	}
+
+	return result.Data().(*http.Response), nil
 }

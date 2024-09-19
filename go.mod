@@ -8,6 +8,7 @@ require (
 	github.com/shengyanli1982/law v0.1.16
 	github.com/shengyanli1982/orbit v0.1.8
 	github.com/shengyanli1982/orbit-contrib/pkg/ratelimiter v0.0.0-20240316141708-c96df0258ecd
+	github.com/shengyanli1982/retry v0.1.8
 	github.com/shengyanli1982/toolkit/pkg/command v0.0.0-20240829143620-c99268455b35
 	github.com/spf13/cobra v1.8.1
 	github.com/tidwall/gjson v1.17.3
