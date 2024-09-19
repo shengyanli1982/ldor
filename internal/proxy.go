@@ -345,12 +345,7 @@ func (s *ProxyService) prepareCodeRequestBody(body []byte) []byte {
 		return s.prepareStableCodeModelRequest(body)
 	// deepseek-coder model
 	case strings.HasPrefix(s.cfg.CodeInstructionModel, DeepSeekCoderModel):
-		if gjson.GetBytes(body, "n").Int() > 1 {
-			body, err = sjson.SetBytes(body, "n", 1)
-			if err != nil {
-				s.log.Errorf("Error setting n: %v", err)
-			}
-		}
+		return s.prepareDeepSeekCoderModelRequest(body)
 		// TODO: Implement other cases if needed (e.g. openai model)
 	}
 
@@ -369,6 +364,17 @@ func (s *ProxyService) prepareStableCodeModelRequest(body []byte) []byte {
 		},
 	}
 	return s.prepareChatModelRequest(body, messages)
+}
+
+func (s *ProxyService) prepareDeepSeekCoderModelRequest(body []byte) []byte {
+	var err error
+	if gjson.GetBytes(body, "n").Int() > 1 {
+		body, err = sjson.SetBytes(body, "n", 1)
+		if err != nil {
+			s.log.Errorf("Error setting n: %v", err)
+		}
+	}
+	return body
 }
 
 func (s *ProxyService) prepareChatModelRequest(body []byte, messages interface{}) []byte {
