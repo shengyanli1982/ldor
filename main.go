@@ -61,7 +61,7 @@ func main() {
 	rateLimiter := rl.NewRateLimiter(rateLimiterConfig)
 
 	orbitConfig := orbit.NewConfig().WithAccessLogEventFunc(func(logger *zap.SugaredLogger, event *log.LogEvent) {
-		logger.Infow("http server access log", "id", event.ID, "endpoint", event.EndPoint, "method", event.Method, "status", event.Status, "latency", event.Latency, "user-agent", event.Agent, "error", event.Error, "stack", event.ErrorStack)
+		logger.Infow("http server access log", "id", event.ID, "endpoint", event.EndPoint, "method", event.Method, "code", event.Code, "status", event.Status, "latency", event.Latency, "user-agent", event.Agent, "error", event.Error, "stack", event.ErrorStack)
 	})
 
 	orbitOptions := orbit.NewOptions().EnableMetric()

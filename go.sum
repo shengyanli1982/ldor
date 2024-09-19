@@ -101,6 +101,8 @@ github.com/shengyanli1982/orbit-contrib v0.0.0 h1:hrcCvlFLDo3L+UGib2oeb3U6UPet/G
 github.com/shengyanli1982/orbit-contrib v0.0.0/go.mod h1:AZ8goMyQCiZMkCLrILam8K30VzO4tq/k8D1y12HCGUg=
 github.com/shengyanli1982/orbit-contrib/pkg/ratelimiter v0.0.0-20240316141708-c96df0258ecd h1:vR3M5u4LU40ZkAEy3T5wqFIKk7C8ewegNFHz+wC6GS4=
 github.com/shengyanli1982/orbit-contrib/pkg/ratelimiter v0.0.0-20240316141708-c96df0258ecd/go.mod h1:ewyw0riD40HC3qIg7vyEp4Nl3qNnluOYZyw+tlGD2Ds=
+github.com/shengyanli1982/retry v0.1.8 h1:RQitL9OyQEcNVDNVlRj2kUpayve8RIwrNWgdffGCoLQ=
+github.com/shengyanli1982/retry v0.1.8/go.mod h1:1C5LUAG0iRudzPTlvA5QHuzZ8JYDLeX0ikyYu1K4Dak=
 github.com/shengyanli1982/toolkit/pkg/command v0.0.0-20240829143620-c99268455b35 h1:695KJHnhrcMFL9P+YvHoJ7vSYFZVfA0pAn6uuC4Veis=
 github.com/shengyanli1982/toolkit/pkg/command v0.0.0-20240829143620-c99268455b35/go.mod h1:63XNJGuHuJWraSmFs6JItq1xFRWpTfeu/2q12mwAFEU=
 github.com/spf13/cobra v1.8.1 h1:e5/vxKd/rZsfSJMUX1agtjeTDf+qv1/JdBF8gg5k9ZM=
