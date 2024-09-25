@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/shengyanli1982/gs"
@@ -23,9 +24,10 @@ import (
 
 func main() {
 	var (
-		configFilePath                                 string
+		configFilePath, logSaveFilePath                string
 		asyncLogWriter                                 *law.WriteAsyncer
 		logger                                         *zap.SugaredLogger
+		zapWriter                                      zapcore.WriteSyncer
 		isReleaseMode, isPlainLogMode, isFullDebugMode bool
 	)
 
@@ -35,6 +37,7 @@ func main() {
 		Long:  "ldor is a proxy service that forwards requests to a target server and returns the response.",
 	}
 	rootCmd.Flags().StringVarP(&configFilePath, "config", "c", "./config.json", "Configuration file path")
+	rootCmd.Flags().StringVarP(&logSaveFilePath, "logs", "l", "", "Output console log save file path (default: \"\"). All log files will be saved 500mb per file, 30 store days, and the maximum number of log files is 10.")
 	rootCmd.Flags().BoolVarP(&isReleaseMode, "release", "r", false, "Set release mode")
 	rootCmd.Flags().BoolVarP(&isPlainLogMode, "plain", "p", false, "Set plain text log mode, default is json log mode (only valid in release mode)")
 	rootCmd.Flags().BoolVarP(&isFullDebugMode, "debug", "d", false, "Set full debug mode, use for debugging, logging all request and response body content")
@@ -67,17 +70,27 @@ func main() {
 	orbitOptions := orbit.NewOptions().EnableMetric()
 	isReleaseMode = isReleaseMode || gin.Mode() == gin.ReleaseMode
 
+	logSaveFilePath = strings.TrimSpace(logSaveFilePath)
+
 	if isReleaseMode {
 		orbitConfig.WithRelease()
 		asyncLogWriter = law.NewWriteAsyncer(os.Stdout, law.DefaultConfig())
+		zapWriter = zapcore.AddSync(asyncLogWriter)
+		if logSaveFilePath != "" {
+			zapWriter = zapcore.NewMultiWriteSyncer(zapWriter, zapcore.AddSync(il.NewLumberjackLogger(logSaveFilePath)))
+		}
 		if isPlainLogMode {
-			logger = il.NewLogger(zapcore.AddSync(asyncLogWriter)).GetZapSugaredLogger().Named("default")
+			logger = il.NewLogger(zapWriter).GetZapSugaredLogger().Named("default")
 		} else {
-			logger = log.NewLogger(zapcore.AddSync(asyncLogWriter)).GetZapSugaredLogger().Named("default")
+			logger = log.NewLogger(zapWriter).GetZapSugaredLogger().Named("default")
 		}
 	} else {
 		fmt.Printf("Loading config: [%s], Value:\n==========\n%s==========\n", configFilePath, appConfig.String())
-		logger = il.NewLogger(zapcore.AddSync(os.Stdout)).GetZapSugaredLogger().Named("default")
+		zapWriter = zapcore.AddSync(os.Stdout)
+		if logSaveFilePath != "" {
+			zapWriter = zapcore.NewMultiWriteSyncer(zapWriter, zapcore.AddSync(il.NewLumberjackLogger(logSaveFilePath)))
+		}
+		logger = il.NewLogger(zapWriter).GetZapSugaredLogger().Named("default")
 	}
 
 	proxyService, err := il.NewProxyService(appConfig, logger, rateLimiter)

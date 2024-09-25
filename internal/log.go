@@ -7,6 +7,7 @@ import (
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 type Logger struct {
@@ -56,4 +57,14 @@ func NewLogger(writeSyncer zapcore.WriteSyncer, options ...zap.Option) *Logger {
 
 func (cl *Logger) GetZapSugaredLogger() *zap.SugaredLogger {
 	return cl.zapLogger.Sugar()
+}
+
+func NewLumberjackLogger(path string) *lumberjack.Logger {
+	return &lumberjack.Logger{
+		Filename:   fmt.Sprintf("%s/console.log", path),
+		MaxSize:    500,   // 每个日志文件最大500MB
+		MaxBackups: 10,    // 最多保留10个备份
+		MaxAge:     30,    // 最多保留30天
+		Compress:   false, // 不压缩备份文件
+	}
 }
